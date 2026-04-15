@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
     private CompletionWindow? _completionWindow;
+    private PseudoCodeColorizer? _colorizer;
 
     public MainWindow()
     {
@@ -188,7 +189,9 @@ public partial class MainWindow : Window
     {
         EditorTextBox.Options.ConvertTabsToSpaces = true;
         EditorTextBox.Options.IndentationSize = 4;
-        EditorTextBox.TextArea.TextView.LineTransformers.Add(new PseudoCodeColorizer());
+        _colorizer = new PseudoCodeColorizer(PseudoCodeColorizer.DarkPalette);
+        EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
+        ApplyEditorTheme(DarkTheme, PseudoCodeColorizer.DarkPalette);
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
@@ -506,7 +509,26 @@ public partial class MainWindow : Window
                 brush.Color = Color.Parse(value);
             }
         }
+
+        ApplyEditorTheme(colors, _isLightTheme ? PseudoCodeColorizer.LightPalette : PseudoCodeColorizer.DarkPalette);
     }
+
+    private void ApplyEditorTheme(IReadOnlyDictionary<string, string> colors, PseudoCodeColorPalette syntaxPalette)
+    {
+        EditorTextBox.Background = BrushFromTheme(colors, "EditorBackground");
+        EditorTextBox.Foreground = BrushFromTheme(colors, "TextPrimary");
+        EditorTextBox.TextArea.Caret.CaretBrush = BrushFromTheme(colors, "CaretBrush");
+        EditorTextBox.TextArea.SelectionBrush = BrushFromTheme(colors, "SelectionBrush");
+        EditorTextBox.TextArea.SelectionForeground = BrushFromTheme(colors, "TextPrimary");
+        EditorTextBox.LineNumbersForeground = BrushFromTheme(colors, "LineNumberText");
+        EditorTextBox.TextArea.TextView.CurrentLineBackground = BrushFromTheme(colors, "LineNumberBackground");
+        EditorTextBox.TextArea.TextView.CurrentLineBorder = new Pen(BrushFromTheme(colors, "BorderBrushMuted"), 1);
+        _colorizer?.SetPalette(syntaxPalette);
+        EditorTextBox.TextArea.TextView.Redraw();
+    }
+
+    private static SolidColorBrush BrushFromTheme(IReadOnlyDictionary<string, string> colors, string key) =>
+        new(Color.Parse(colors[key]));
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
 
@@ -720,7 +742,16 @@ internal sealed class PseudoCompletionData(CommandInfo item) : ICompletionData
     }
 }
 
-internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
+internal sealed record PseudoCodeColorPalette(
+    IBrush KeywordBrush,
+    IBrush TypeBrush,
+    IBrush StringBrush,
+    IBrush NumberBrush,
+    IBrush OperatorBrush,
+    IBrush CommentBrush,
+    IBrush BlockBrush);
+
+internal sealed class PseudoCodeColorizer(PseudoCodeColorPalette palette) : DocumentColorizingTransformer
 {
     private static readonly Regex StringLiteral = new("\"[^\"]*\"", RegexOptions.Compiled);
     private static readonly Regex NumberLiteral = new(@"\b\d+(\.\d+)?\b", RegexOptions.Compiled);
@@ -729,13 +760,30 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
     private static readonly Regex Keyword = new(@"\b(Algoritmo|Proceso|FinAlgoritmo|FinProceso|Definir|Como|Escribir|Leer|Si|Entonces|Sino|FinSi|Mientras|Hacer|FinMientras|Para|Hasta|Con|Paso|FinPara|Segun|FinSegun|Verdadero|Falso|Y|O|NO)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex BlockLine = new(@"^\s*(Algoritmo|Proceso|Si|Sino|FinSi|Mientras|FinMientras|Para|FinPara|Segun|FinSegun|FinAlgoritmo|FinProceso)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly IBrush KeywordBrush = Brush("#5EA1FF");
-    private static readonly IBrush TypeBrush = Brush("#4EC9B0");
-    private static readonly IBrush StringBrush = Brush("#CE9178");
-    private static readonly IBrush NumberBrush = Brush("#B5CEA8");
-    private static readonly IBrush OperatorBrush = Brush("#DCDCAA");
-    private static readonly IBrush CommentBrush = Brush("#6A9955");
-    private static readonly IBrush BlockBrush = Brush("#1F3B4D");
+    public static readonly PseudoCodeColorPalette DarkPalette = new(
+        Brush("#5EA1FF"),
+        Brush("#4EC9B0"),
+        Brush("#CE9178"),
+        Brush("#B5CEA8"),
+        Brush("#DCDCAA"),
+        Brush("#6A9955"),
+        Brush("#1F3B4D"));
+
+    public static readonly PseudoCodeColorPalette LightPalette = new(
+        Brush("#0645AD"),
+        Brush("#00796B"),
+        Brush("#A31515"),
+        Brush("#098658"),
+        Brush("#795E26"),
+        Brush("#008000"),
+        Brush("#EAF3FF"));
+
+    private PseudoCodeColorPalette _palette = palette;
+
+    public void SetPalette(PseudoCodeColorPalette newPalette)
+    {
+        _palette = newPalette;
+    }
 
     protected override void ColorizeLine(DocumentLine line)
     {
@@ -745,24 +793,24 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
         {
             ChangeLinePart(line.Offset, line.EndOffset, element =>
             {
-                element.TextRunProperties.SetBackgroundBrush(BlockBrush);
+                element.TextRunProperties.SetBackgroundBrush(_palette.BlockBrush);
             });
         }
 
         var commentIndex = FindCommentIndex(text);
         var codeLength = commentIndex >= 0 ? commentIndex : text.Length;
 
-        ApplyMatches(line, text, Keyword, KeywordBrush, codeLength);
-        ApplyMatches(line, text, TypeName, TypeBrush, codeLength);
-        ApplyMatches(line, text, StringLiteral, StringBrush, codeLength);
-        ApplyMatches(line, text, NumberLiteral, NumberBrush, codeLength);
-        ApplyMatches(line, text, Operator, OperatorBrush, codeLength);
+        ApplyMatches(line, text, Keyword, _palette.KeywordBrush, codeLength);
+        ApplyMatches(line, text, TypeName, _palette.TypeBrush, codeLength);
+        ApplyMatches(line, text, StringLiteral, _palette.StringBrush, codeLength);
+        ApplyMatches(line, text, NumberLiteral, _palette.NumberBrush, codeLength);
+        ApplyMatches(line, text, Operator, _palette.OperatorBrush, codeLength);
 
         if (commentIndex >= 0)
         {
             ChangeLinePart(line.Offset + commentIndex, line.EndOffset, element =>
             {
-                element.TextRunProperties.SetForegroundBrush(CommentBrush);
+                element.TextRunProperties.SetForegroundBrush(_palette.CommentBrush);
             });
         }
     }
