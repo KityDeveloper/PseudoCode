@@ -83,7 +83,7 @@
 	// Keep the container user's UID/GID aligned with the host user so bind-mounted
 	// source files stay writable when using rootless Podman on Bazzite.
 	"updateRemoteUserUID": true,
-	"remoteUser": "vscode",
+	"remoteUser": "1000:1000",
 	
 	// Performance settings
 	"hostRequirements": {

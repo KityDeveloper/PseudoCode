@@ -17,7 +17,6 @@ services:
       - label=disable
 
     privileged: true
-    userns_mode: "keep-id"
 
     # Keep container running (works with devcontainers' /bin/bash entrypoint shim)
     command: ["-lc", "sleep infinity"]
