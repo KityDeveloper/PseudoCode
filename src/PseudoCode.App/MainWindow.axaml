@@ -1,0 +1,197 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PseudoCode.App.MainWindow"
+        Title="PseudoCode"
+        Width="1200"
+        Height="760"
+        MinWidth="920"
+        MinHeight="600"
+        Background="{StaticResource EditorBackground}">
+  <Window.Resources>
+    <SolidColorBrush x:Key="PanelBackground" Color="#252526" />
+    <SolidColorBrush x:Key="EditorBackground" Color="#1E1E1E" />
+    <SolidColorBrush x:Key="ActivityBackground" Color="#181818" />
+    <SolidColorBrush x:Key="TopBarBackground" Color="#2D2D30" />
+    <SolidColorBrush x:Key="TabBackground" Color="#1E1E1E" />
+    <SolidColorBrush x:Key="InsetBackground" Color="#1F1F1F" />
+    <SolidColorBrush x:Key="LineNumberBackground" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="OutputBackground" Color="#111111" />
+    <SolidColorBrush x:Key="VariablesBackground" Color="#151515" />
+    <SolidColorBrush x:Key="ButtonBackground" Color="#2D2D30" />
+    <SolidColorBrush x:Key="ButtonHoverBackground" Color="#37373D" />
+    <SolidColorBrush x:Key="ButtonBorder" Color="#4B4B4B" />
+    <SolidColorBrush x:Key="ButtonHoverBorder" Color="#5D5D5D" />
+    <SolidColorBrush x:Key="BorderBrushMuted" Color="#3C3C3C" />
+    <SolidColorBrush x:Key="TextPrimary" Color="#D4D4D4" />
+    <SolidColorBrush x:Key="TextSecondary" Color="#9DA3AA" />
+    <SolidColorBrush x:Key="LineNumberText" Color="#858585" />
+    <SolidColorBrush x:Key="CaretBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#264F78" />
+    <SolidColorBrush x:Key="AccentBlue" Color="#007ACC" />
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="Button.command">
+      <Setter Property="Background" Value="{StaticResource ButtonBackground}" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{StaticResource ButtonBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Button.command:pointerover">
+      <Setter Property="Background" Value="{StaticResource ButtonHoverBackground}" />
+      <Setter Property="BorderBrush" Value="{StaticResource ButtonHoverBorder}" />
+    </Style>
+
+    <Style Selector="TextBlock.panel-title">
+      <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="14,12,14,8" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="36,*,24" ColumnDefinitions="48,260,*">
+    <Border Grid.Row="0" Grid.ColumnSpan="3" Background="{StaticResource TopBarBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
+          <TextBlock Text="PseudoCode" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
+          <TextBlock Text="Archivo" Foreground="{StaticResource TextSecondary}" />
+          <TextBlock Text="Editar" Foreground="{StaticResource TextSecondary}" />
+          <TextBlock Text="Ejecutar" Foreground="{StaticResource TextSecondary}" />
+          <TextBlock Text="Ayuda" Foreground="{StaticResource TextSecondary}" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+          <Button x:Name="ThemeToggleButton" Classes="command" Click="ThemeToggle_Click" Content="Modo claro" Padding="10,4" />
+          <TextBlock x:Name="WindowStateText"
+                     Text="Listo"
+                     Foreground="{StaticResource TextSecondary}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource ActivityBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
+      <StackPanel Margin="0,12" Spacing="18" HorizontalAlignment="Center">
+        <TextBlock Text="PC" Foreground="{StaticResource AccentBlue}" FontWeight="Bold" FontSize="15" />
+        <TextBlock Text="EX" Foreground="{StaticResource TextSecondary}" FontSize="13" />
+        <TextBlock Text="RUN" Foreground="{StaticResource TextSecondary}" FontSize="12" />
+        <TextBlock Text="?" Foreground="{StaticResource TextSecondary}" FontSize="18" />
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,Auto,*,Auto,190">
+        <TextBlock Classes="panel-title" Text="EXPLORADOR" />
+        <StackPanel Grid.Row="1" Margin="14,0,14,12" Spacing="8">
+          <Button Classes="command" Click="NewFile_Click" Content="Nuevo algoritmo" HorizontalAlignment="Stretch" />
+          <Button Classes="command" Click="OpenFile_Click" Content="Abrir..." HorizontalAlignment="Stretch" />
+          <Button Classes="command" Click="SaveFile_Click" Content="Guardar" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <Border Grid.Row="2" Margin="14,0,14,12" Background="{StaticResource InsetBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="1" CornerRadius="4">
+          <StackPanel Margin="12" Spacing="8">
+            <TextBlock Text="pseudo-main.psc" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
+            <TextBlock x:Name="CurrentPathText" Text="Sin guardar" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="3" Classes="panel-title" Text="AYUDA POR TEMAS" />
+        <ScrollViewer Grid.Row="4" Margin="14,0,14,14">
+          <StackPanel x:Name="HelpTopicsPanel" Spacing="8" />
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="42,*,210">
+      <Border Grid.Row="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,12,0">
+          <Border Background="{StaticResource TabBackground}" BorderBrush="{StaticResource AccentBlue}" BorderThickness="0,2,0,0" Padding="16,0">
+            <TextBlock Text="pseudo-main.psc" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
+          </Border>
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+            <Button Classes="command" Click="Run_Click" Content="Ejecutar" />
+            <Button Classes="command" Click="SaveFile_Click" Content="Guardar" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" ColumnDefinitions="64,*" Background="{StaticResource EditorBackground}">
+        <Border Grid.Column="0" Background="{StaticResource LineNumberBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
+          <TextBlock x:Name="LineNumbersText"
+                     Margin="0,12,12,12"
+                     TextAlignment="Right"
+                     Foreground="{StaticResource LineNumberText}"
+                     FontFamily="Cascadia Code,Consolas,monospace"
+                     FontSize="15"
+                     LineHeight="23" />
+        </Border>
+
+        <TextBox Grid.Column="1"
+                 x:Name="EditorTextBox"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 TextWrapping="NoWrap"
+                 TextChanged="Editor_TextChanged"
+                 Background="{StaticResource EditorBackground}"
+                 Foreground="{StaticResource TextPrimary}"
+                 BorderThickness="0"
+                 CaretBrush="{StaticResource CaretBrush}"
+                 SelectionBrush="{StaticResource SelectionBrush}"
+                 FontFamily="Cascadia Code,Consolas,monospace"
+                 FontSize="15"
+                 LineHeight="23"
+                 Padding="14,12"
+                 VerticalContentAlignment="Top"
+                 HorizontalContentAlignment="Left"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
+      </Grid>
+
+      <Grid Grid.Row="2" RowDefinitions="34,*" Background="{StaticResource EditorBackground}">
+        <Border BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,1,0,1" Background="{StaticResource PanelBackground}">
+          <StackPanel Orientation="Horizontal" Spacing="18" Margin="14,0" VerticalAlignment="Center">
+            <TextBlock Text="SALIDA" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
+            <TextBlock Text="DIAGNOSTICOS" Foreground="{StaticResource TextSecondary}" />
+            <TextBlock Text="VARIABLES" Foreground="{StaticResource TextSecondary}" />
+          </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="2*,*" Background="{StaticResource OutputBackground}">
+          <TextBox x:Name="OutputTextBox"
+                   IsReadOnly="True"
+                   TextWrapping="Wrap"
+                   Background="{StaticResource OutputBackground}"
+                   Foreground="{StaticResource TextPrimary}"
+                   BorderThickness="0"
+                   FontFamily="Cascadia Code,Consolas,monospace"
+                   FontSize="13"
+                   Padding="14"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          <TextBox Grid.Column="1"
+                   x:Name="VariablesTextBox"
+                   IsReadOnly="True"
+                   TextWrapping="Wrap"
+                   Background="{StaticResource VariablesBackground}"
+                   Foreground="{StaticResource TextSecondary}"
+                   BorderThickness="0"
+                   FontFamily="Cascadia Code,Consolas,monospace"
+                   FontSize="13"
+                   Padding="14"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <Border Grid.Row="2" Grid.ColumnSpan="3" Background="{StaticResource AccentBlue}">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
+        <TextBlock Text=".NET 8 + Avalonia" Foreground="White" VerticalAlignment="Center" FontSize="12" />
+        <TextBlock Grid.Column="2" x:Name="CursorStatusText" Text="Linea 1, Columna 1" Foreground="White" VerticalAlignment="Center" FontSize="12" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

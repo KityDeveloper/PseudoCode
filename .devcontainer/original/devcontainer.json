@@ -1,0 +1,38 @@
+// Dev container for PseudoCode, a .NET 8 + Avalonia desktop app.
+{
+	"name": "PseudoCode Avalonia",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "pseudocode-dev",
+	"workspaceFolder": "/workspaces",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"files.watcherExclude": {
+					"**/bin/**": true,
+					"**/obj/**": true,
+					"**/artifacts/**": true
+				}
+			},
+			"extensions": [
+				"ms-dotnettools.csharp",
+				"ms-dotnettools.csdevkit",
+				"ms-dotnettools.vscode-dotnet-runtime",
+				"visualstudioexptteam.vscodeintellicode"
+			]
+		}
+	},
+	"postCreateCommand": "dotnet restore PseudoCode.sln",
+	"postStartCommand": "sudo chown -R vscode:vscode /home/vscode/.ssh 2>/dev/null || true",
+	"features": {
+		"ghcr.io/devcontainers/features/dotnet:2": {
+			"version": "8.0"
+		},
+		"ghcr.io/devcontainers/features/powershell:1": {
+			"version": "latest"
+		}
+	},
+	"mounts": [
+		"source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+	],
+	"remoteUser": "vscode"
+}

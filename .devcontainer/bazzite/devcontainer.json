@@ -1,0 +1,99 @@
+// Bazzite/Flatpak profile for PseudoCode, a .NET 8 + Avalonia desktop app.
+{
+	"name": "PseudoCode Avalonia - Bazzite",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "pseudocode-bazzite",
+	"workspaceFolder": "/workspaces",
+	
+	// Runtime arguments for Flatpak/Podman compatibility
+	"runArgs": [
+		"--device=/dev/dri:/dev/dri",
+		"--device=/dev/input:/dev/input",
+		"--ipc=host",
+		"--security-opt=label=disable"
+	],
+	
+	// Container environment for X11/Wayland (Flatpak)
+	"containerEnv": {
+		"DISPLAY": ":0",
+		"XDG_RUNTIME_DIR": "/run/user/1000",
+		"DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+		"WAYLAND_DISPLAY": "wayland-0",
+		"DOTNET_EnableDiagnostics": "0",
+		"CUPS_SERVER": "unix:/run/cups/cups.sock"
+	},
+	
+	// Remote environment variables
+	"remoteEnv": {
+		"DISPLAY": ":0",
+		"XDG_RUNTIME_DIR": "/run/user/1000",
+		"DOTNET_EnableDiagnostics": "0",
+		"DOCKER_HOST": "unix:///run/user/1000/podman/podman.sock",
+		"XAUTHORITY": "/tmp/.xauth-vscode",
+		"CUPS_SERVER": "unix:/run/cups/cups.sock"
+	},
+
+	// Refresh the X11 auth cookie on every container start.
+	// Copy the active xauth_* file to a stable path that the 'vscode' user can read,
+	// then relax the X socket permissions for Flatpak/rootless Podman sessions.
+	"postStartCommand": "sudo sh -c 'f=$(find /run/user/1000/ -maxdepth 1 -name \"xauth_*\" -printf \"%T@ %p\\n\" 2>/dev/null | sort -rn | head -1 | cut -d\" \" -f2-); [ -n \"$f\" ] && cp \"$f\" /tmp/.xauth-vscode && chmod 644 /tmp/.xauth-vscode; chmod 777 /tmp/.X11-unix/X0 2>/dev/null' || true && sudo chown -R vscode:vscode /home/vscode/.ssh 2>/dev/null || true",
+	
+	// Mounts for X11/Wayland and Flatpak runtime
+	"mounts": [
+		"source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind",
+		"source=${localEnv:HOME}/.Xauthority,target=/tmp/.xauth-vscode,type=bind,consistency=cached"
+	],
+	
+	// Customize container specific properties
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"files.watcherExclude": {
+					"**/.git/objects/**": true,
+					"**/.git/subtree-cache/**": true,
+					"**/.vs/**": true,
+					"**/bin/**": true,
+					"**/obj/**": true,
+					"**/artifacts/**": true
+				}
+			},
+			"extensions": [
+				"ms-dotnettools.csharp",
+				"ms-dotnettools.csdevkit",
+				"ms-dotnettools.vscode-dotnet-runtime",
+				"visualstudioexptteam.vscodeintellicode"
+			]
+		}
+	},
+	
+	"features": {
+		"ghcr.io/devcontainers/features/dotnet:2": {
+			"version": "8.0"
+		},
+		"ghcr.io/devcontainers/features/powershell:1": {
+			"version": "latest"
+		},
+		"ghcr.io/devcontainers/features/github-cli:1": {
+			"version": "latest"
+		}
+	},
+	
+	"postCreateCommand": "if [ -d \"/run/user/1000\" ]; then export XDG_RUNTIME_DIR=\"/run/user/1000\"; else export XDG_RUNTIME_DIR=\"/tmp/runtime-vscode\"; mkdir -p $XDG_RUNTIME_DIR; chmod 700 $XDG_RUNTIME_DIR; fi && echo \"export XDG_RUNTIME_DIR=\\\"${XDG_RUNTIME_DIR}\\\"\" >> ~/.bashrc && sudo chown -R vscode:vscode /home/vscode/.ssh /home/vscode/.vscode-server /home/vscode/.nuget 2>/dev/null || true && dotnet restore PseudoCode.sln",
+	
+	// Keep the container user's UID/GID aligned with the host user so bind-mounted
+	// source files stay writable when using rootless Podman on Bazzite.
+	"updateRemoteUserUID": true,
+	"remoteUser": "vscode",
+	
+	// Performance settings
+	"hostRequirements": {
+		"cpus": 4,
+		"memory": "8gb",
+		"storage": "20gb"
+	},
+	"portsAttributes": {
+		"5000": {
+			"label": "PseudoCode Dev"
+		}
+	}
+}

@@ -1,0 +1,47 @@
+services:
+  pseudocode-bazzite:
+    container_name: pseudocode-bazzite-dev
+    build: 
+      context: .
+      dockerfile: Dockerfile
+
+    volumes:
+      - ../..:/workspaces:cached
+      - vscode-server:/home/vscode/.vscode-server
+      - dotnet-cache:/home/vscode/.nuget
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /run/user/1000:/run/user/1000
+      - /run/cups:/run/cups
+
+    security_opt:
+      - label=disable
+
+    privileged: true
+    userns_mode: "keep-id"
+
+    # Keep container running (works with devcontainers' /bin/bash entrypoint shim)
+    command: ["-lc", "sleep infinity"]
+
+    # Environment variables
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_EnableDiagnostics: "0"
+      DISPLAY: ":0"
+      WAYLAND_DISPLAY: "wayland-0"
+      XDG_RUNTIME_DIR: "/run/user/1000"
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus"
+      XAUTHORITY: "/tmp/.xauth-vscode"
+      CUPS_SERVER: "unix:/run/cups/cups.sock"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 6G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+volumes:
+  vscode-server:
+  dotnet-cache:
