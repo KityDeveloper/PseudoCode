@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=PseudoCode
+Comment=Editor educativo de pseudocodigo
+Exec=pseudocode
+Terminal=false
+Categories=Development;Education;

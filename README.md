@@ -48,6 +48,8 @@ El proyecto incluye dos perfiles:
 El workflow `Release` de GitHub Actions se ejecuta manualmente desde la pestana **Actions**. Pide un tag como `v1.0.0`, compila Windows y Linux, espera aprobacion en el environment `release`, y despues crea el tag y el GitHub Release con los paquetes:
 
 - `PseudoCode-linux-x64-vX.Y.Z.tar.gz`
+- `pseudocode_X.Y.Z_amd64.deb`
+- `pseudocode-X.Y.Z.x86_64.rpm`
 - `PseudoCode-win-x64-vX.Y.Z.zip`
 
 Para que GitHub pida aprobacion antes de publicar, configura el environment en el repositorio:
@@ -55,6 +57,44 @@ Para que GitHub pida aprobacion antes de publicar, configura el environment en e
 1. Ve a **Settings > Environments**.
 2. Crea un environment llamado `release`.
 3. Activa **Required reviewers** y agregate como reviewer.
+
+Usa tags SemVer validos:
+
+```text
+v1.0.0
+v1.0.0-beta.1
+v1.0.0-alpha.1
+```
+
+Instalar en Debian/Ubuntu:
+
+```bash
+sudo apt install ./pseudocode_X.Y.Z_amd64.deb
+pseudocode
+```
+
+Instalar en Fedora:
+
+```bash
+sudo dnf install ./pseudocode-X.Y.Z.x86_64.rpm
+pseudocode
+```
+
+En Bazzite puedes probar la app sin instalar usando el paquete portable:
+
+```bash
+tar -xzf PseudoCode-linux-x64-vX.Y.Z.tar.gz
+./PseudoCode-linux-x64/PseudoCode.App
+```
+
+Si quieres instalar el `.rpm` en Bazzite, usa una capa de `rpm-ostree` y reinicia:
+
+```bash
+sudo rpm-ostree install ./pseudocode-X.Y.Z.x86_64.rpm
+systemctl reboot
+```
+
+En Bazzite/Atomic Desktop, Flatpak es la ruta recomendada para apps graficas distribuidas a largo plazo. El `.tar.gz` sirve muy bien para pruebas y el `.rpm` sirve si aceptas usar paquetes layered.
 
 Linux x64:
 

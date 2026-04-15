@@ -57,6 +57,10 @@ jobs:
       - name: Restore
         run: dotnet restore PseudoCode.sln
 
+      - name: Install Linux packaging tools
+        if: matrix.runtime == 'linux-x64'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Publish
         run: >
           dotnet publish src/PseudoCode.App/PseudoCode.App.csproj
@@ -73,6 +77,77 @@ jobs:
         run: |
           mkdir -p dist
           tar -czf dist/${{ matrix.output }}-${{ steps.version.outputs.tag }}.tar.gz -C publish ${{ matrix.output }}
+
+      - name: Package Debian and Fedora
+        if: matrix.runtime == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.version.outputs.tag }}"
+          version="${{ steps.version.outputs.version }}"
+          package_name="pseudocode"
+          display_name="PseudoCode"
+          install_root="pkg-root"
+          app_dir="$install_root/opt/pseudocode"
+
+          rm -rf "$install_root" rpmbuild
+          mkdir -p "$app_dir" "$install_root/usr/bin" "$install_root/usr/share/applications"
+          cp -R publish/${{ matrix.output }}/. "$app_dir/"
+          cp packaging/linux/pseudocode.desktop "$install_root/usr/share/applications/pseudocode.desktop"
+          ln -s /opt/pseudocode/PseudoCode.App "$install_root/usr/bin/pseudocode"
+          chmod +x "$app_dir/PseudoCode.App"
+
+          mkdir -p "$install_root/DEBIAN"
+          cat > "$install_root/DEBIAN/control" <<EOF
+          Package: $package_name
+          Version: $version
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Kity Dev <kitydeveloper@gmail.com>
+          Description: $display_name editor educativo de pseudocodigo
+           Editor de pseudocodigo en espanol hecho con .NET y Avalonia.
+          EOF
+          dpkg-deb --build "$install_root" "dist/${package_name}_${version}_amd64.deb"
+
+          mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+          tar -czf "rpmbuild/SOURCES/${package_name}-${version}.tar.gz" -C "$install_root" .
+          rpm_version="${version%%-*}"
+          rpm_release="1"
+          if [[ "$version" == *-* ]]; then
+            rpm_release="0.${version#*-}"
+          fi
+          cat > rpmbuild/SPECS/pseudocode.spec <<EOF
+          Name: $package_name
+          Version: $rpm_version
+          Release: $rpm_release%{?dist}
+          Summary: $display_name editor educativo de pseudocodigo
+          License: MIT
+          BuildArch: x86_64
+
+          %description
+          Editor de pseudocodigo en espanol hecho con .NET y Avalonia.
+
+          %prep
+
+          %build
+
+          %install
+          mkdir -p %{buildroot}
+          tar -xzf %{_sourcedir}/${package_name}-${version}.tar.gz -C %{buildroot}
+
+          %files
+          /opt/pseudocode
+          /usr/bin/pseudocode
+          /usr/share/applications/pseudocode.desktop
+
+          %changelog
+          * Thu Jan 01 1970 Kity Dev <kitydeveloper@gmail.com> - $rpm_version-$rpm_release
+          - Automated release
+          EOF
+          rpmbuild --define "_topdir $PWD/rpmbuild" -bb rpmbuild/SPECS/pseudocode.spec
+          cp rpmbuild/RPMS/x86_64/*.rpm "dist/${package_name}-${version}.x86_64.rpm"
 
       - name: Package Windows
         if: matrix.archive == 'zip'
@@ -105,7 +180,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download packages
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: dist
 
