@@ -19,6 +19,11 @@ namespace PseudoCode.App;
 
 public partial class MainWindow : Window
 {
+    private const double DefaultEditorFontSize = 15;
+    private const double MinEditorFontSize = 10;
+    private const double MaxEditorFontSize = 30;
+    private const double EditorZoomStep = 1;
+
     private readonly PseudoInterpreter _interpreter = new();
     private IStorageFile? _currentFile;
     private bool _hasUnsavedChanges;
@@ -42,6 +47,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, Editor_Drop);
         UpdateLineNumbers();
         UpdateWindowState("Listo para escribir pseudocodigo");
+        EditorTextBox.Focus();
     }
 
     private async void OpenFile_Click(object? sender, RoutedEventArgs e)
@@ -329,6 +335,7 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
+        EditorTextBox.PointerWheelChanged += Editor_PointerWheelChanged;
     }
 
     private void Editor_TextEntered(object? sender, TextInputEventArgs e)
@@ -354,6 +361,12 @@ public partial class MainWindow : Window
 
     private void Editor_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && TryHandleEditorZoomKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             ShowCompletion(force: true);
@@ -373,6 +386,63 @@ public partial class MainWindow : Window
             InsertSmartNewLine();
             e.Handled = true;
         }
+    }
+
+    private void Editor_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        if (e.Delta.Y > 0)
+        {
+            ZoomEditor(1);
+        }
+        else if (e.Delta.Y < 0)
+        {
+            ZoomEditor(-1);
+        }
+
+        e.Handled = true;
+    }
+
+    private bool TryHandleEditorZoomKey(KeyEventArgs e)
+    {
+        var key = e.Key.ToString();
+        var keySymbol = e.KeySymbol ?? string.Empty;
+
+        if (key is "Add" or "OemPlus" or "Plus" || keySymbol is "+" or "=")
+        {
+            ZoomEditor(1);
+            return true;
+        }
+
+        if (key is "Subtract" or "OemMinus" or "Minus" || keySymbol is "-" or "_")
+        {
+            ZoomEditor(-1);
+            return true;
+        }
+
+        if (key is "D0" or "NumPad0" || keySymbol is "0")
+        {
+            SetEditorFontSize(DefaultEditorFontSize);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ZoomEditor(int direction)
+    {
+        SetEditorFontSize(EditorTextBox.FontSize + direction * EditorZoomStep);
+    }
+
+    private void SetEditorFontSize(double fontSize)
+    {
+        EditorTextBox.FontSize = Math.Clamp(fontSize, MinEditorFontSize, MaxEditorFontSize);
+        EditorTextBox.TextArea.TextView.Redraw();
+        UpdateWindowState($"Zoom editor: {EditorTextBox.FontSize:0}px");
     }
 
     private void ShowCompletion(bool force = false)
@@ -413,8 +483,8 @@ public partial class MainWindow : Window
 
     private string GetCurrentWord()
     {
-        var offset = EditorTextBox.CaretOffset;
         var document = EditorTextBox.Document;
+        var offset = GetSafeCaretOffset(document);
         var start = offset;
 
         while (start > 0)
@@ -434,7 +504,7 @@ public partial class MainWindow : Window
     private void InsertSmartNewLine()
     {
         var document = EditorTextBox.Document;
-        var offset = EditorTextBox.CaretOffset;
+        var offset = GetSafeCaretOffset(document);
         var line = document.GetLineByOffset(offset);
         var lineText = document.GetText(line.Offset, offset - line.Offset);
         var currentIndent = Regex.Match(lineText, @"^\s*").Value;
@@ -451,8 +521,16 @@ public partial class MainWindow : Window
 
     private void InsertAtCaret(string text)
     {
-        EditorTextBox.Document.Insert(EditorTextBox.CaretOffset, text);
-        EditorTextBox.CaretOffset += text.Length;
+        var document = EditorTextBox.Document;
+        var offset = GetSafeCaretOffset(document);
+
+        document.Insert(offset, text);
+        EditorTextBox.CaretOffset = Math.Min(offset + text.Length, document.TextLength);
+    }
+
+    private int GetSafeCaretOffset(TextDocument document)
+    {
+        return Math.Clamp(EditorTextBox.CaretOffset, 0, document.TextLength);
     }
 
     private void Editor_DragOver(object? sender, DragEventArgs e)
