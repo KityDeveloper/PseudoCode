@@ -96,7 +96,7 @@ jobs:
           mkdir -p "$app_dir" "$package_root/usr/bin" "$package_root/usr/share/applications" "$package_root/usr/share/icons/hicolor/256x256/apps"
           cp -R publish/${{ matrix.output }}/. "$app_dir/"
           cp packaging/linux/pseudocode.desktop "$package_root/usr/share/applications/pseudocode.desktop"
-          cp resources/images/iconKityDev.png "$package_root/usr/share/icons/hicolor/256x256/apps/pseudocode.png"
+          cp resources/images/logoPseudoCode.png "$package_root/usr/share/icons/hicolor/256x256/apps/pseudocode.png"
           cat > "$package_root/usr/bin/pseudocode" <<'EOF'
           #!/usr/bin/env sh
           exec /opt/pseudocode/PseudoCode.App "$@"

@@ -1,10 +1,13 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
@@ -133,6 +136,73 @@ public partial class MainWindow : Window
     private void LoadFirstHelpExample_Click(object? sender, RoutedEventArgs e)
     {
         LoadHelpExample(HelpTopics[0]);
+    }
+
+    private async void About_Click(object? sender, RoutedEventArgs e)
+    {
+        var window = new Window
+        {
+            Title = "Acerca de Kity Dev",
+            Width = 420,
+            Height = 360,
+            MinWidth = 360,
+            MinHeight = 320,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush("PanelBackground"),
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png")))
+        };
+
+        var icon = new Image
+        {
+            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png"))),
+            Width = 92,
+            Height = 92,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        var content = new StackPanel
+        {
+            Spacing = 10,
+            Margin = new Thickness(24),
+            Children =
+            {
+                icon,
+                new TextBlock
+                {
+                    Text = "Kity Dev",
+                    Foreground = Brush("TextPrimary"),
+                    FontSize = 22,
+                    FontWeight = FontWeight.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                },
+                new TextBlock
+                {
+                    Text = "PseudoCode",
+                    Foreground = Brush("TextSecondary"),
+                    FontSize = 15,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                },
+                BuildAboutLine("YouTube", "@KityDev - https://www.youtube.com/@KityDev"),
+                BuildAboutLine("GitHub", "https://github.com/KityDeveloper"),
+                BuildAboutLine("Web", "kity.dev"),
+                new Button
+                {
+                    Content = "Cerrar",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Margin = new Thickness(0, 12, 0, 0),
+                    Classes = { "command" }
+                }
+            }
+        };
+
+        if (content.Children[^1] is Button closeButton)
+        {
+            closeButton.Click += (_, _) => window.Close();
+        }
+
+        window.Content = content;
+        await window.ShowDialog(this);
     }
 
     private void ThemeToggle_Click(object? sender, RoutedEventArgs e)
@@ -597,6 +667,14 @@ public partial class MainWindow : Window
         new(Color.Parse(colors[key]));
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
+
+    private TextBlock BuildAboutLine(string label, string value) =>
+        new()
+        {
+            Text = $"{label}: {value}",
+            Foreground = Brush("TextPrimary"),
+            TextWrapping = TextWrapping.Wrap
+        };
 
     private static bool StartsLogicalBlock(string text) =>
         StartsWithAny(text, "Algoritmo ", "Proceso ", "Si ", "Mientras ", "Para ", "Segun ");

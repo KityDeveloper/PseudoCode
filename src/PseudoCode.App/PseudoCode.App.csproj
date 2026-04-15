@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AvaloniaResource Include="../../resources/images/logoPseudoCode.png" Link="Assets/logoPseudoCode.png" />
     <AvaloniaResource Include="../../resources/images/iconKityDev.png" Link="Assets/iconKityDev.png" />
   </ItemGroup>
 </Project>
