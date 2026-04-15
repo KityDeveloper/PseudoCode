@@ -46,16 +46,8 @@ jobs:
           tag="${{ github.event.inputs.tag }}"
           version="${tag#v}"
 
-          if [[ "$version" =~ ^beta([0-9]+)\.([0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.0-beta.1"
-          elif [[ "$version" =~ ^beta([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-beta.1"
-          elif [[ "$version" =~ ^alpha([0-9]+)\.([0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.0-alpha.1"
-          elif [[ "$version" =~ ^alpha([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-alpha.1"
-          elif [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Invalid release tag '$tag'. Use v1.0.0, 1.0.0-beta.1, beta1.0, or alpha1.0."
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag '$tag'. Use v1.0.0, v1.0.0-beta.1, or v1.0.0-alpha.1."
             exit 1
           fi
 
