@@ -11,27 +11,66 @@ public sealed class PseudoInterpreter
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
     private readonly List<string> _diagnostics = [];
+    private string[] _lines = [];
+    private int _nextLineIndex;
+    private Queue<string> _pendingInputVariables = [];
+    private string? _waitingInputVariable;
 
-    public ExecutionResult Run(string source)
+    public ExecutionResult Start(string source)
     {
         _variables.Clear();
         _output.Clear();
         _diagnostics.Clear();
+        _pendingInputVariables.Clear();
+        _waitingInputVariable = null;
 
-        var lines = source.Replace("\r\n", "\n").Split('\n');
-        for (var index = 0; index < lines.Length; index++)
+        _lines = source.Replace("\r\n", "\n").Split('\n');
+        _nextLineIndex = 0;
+        return RunUntilBlocked();
+    }
+
+    public ExecutionResult Continue(string input)
+    {
+        if (_waitingInputVariable is null)
         {
-            var lineNumber = index + 1;
-            var line = RemoveComment(lines[index]).Trim();
+            _diagnostics.Add("No hay ninguna instruccion Leer esperando datos.");
+            return BuildResult();
+        }
+
+        _variables[_waitingInputVariable] = ParseInput(input);
+        _output.Add($"> {input}");
+        _waitingInputVariable = null;
+        return RunUntilBlocked();
+    }
+
+    public ExecutionResult Run(string source) => Start(source);
+
+    private ExecutionResult RunUntilBlocked()
+    {
+        if (TryRequestNextInput())
+        {
+            return BuildResult();
+        }
+
+        for (; _nextLineIndex < _lines.Length; _nextLineIndex++)
+        {
+            var lineNumber = _nextLineIndex + 1;
+            var line = RemoveComment(_lines[_nextLineIndex]).Trim();
             if (string.IsNullOrWhiteSpace(line))
             {
                 continue;
             }
 
             ExecuteLine(line, lineNumber);
+
+            if (TryRequestNextInput())
+            {
+                _nextLineIndex++;
+                return BuildResult();
+            }
         }
 
-        return new ExecutionResult(_diagnostics.Count == 0, _output.ToArray(), _diagnostics.ToArray(), new Dictionary<string, object?>(_variables));
+        return BuildResult();
     }
 
     private void ExecuteLine(string line, int lineNumber)
@@ -127,9 +166,55 @@ public sealed class PseudoInterpreter
                 continue;
             }
 
-            _variables[name] = 0d;
-            _output.Add($"? {name} = 0 (entrada simulada)");
+            _pendingInputVariables.Enqueue(name);
         }
+    }
+
+    private bool TryRequestNextInput()
+    {
+        if (_waitingInputVariable is not null)
+        {
+            return true;
+        }
+
+        if (!_pendingInputVariables.TryDequeue(out var name))
+        {
+            return false;
+        }
+
+        _waitingInputVariable = name;
+        _output.Add($"? {name}:");
+        return true;
+    }
+
+    private ExecutionResult BuildResult() =>
+        new(
+            _diagnostics.Count == 0 && _waitingInputVariable is null,
+            _output.ToArray(),
+            _diagnostics.ToArray(),
+            new Dictionary<string, object?>(_variables),
+            _waitingInputVariable is not null,
+            _waitingInputVariable);
+
+    private static object? ParseInput(string input)
+    {
+        input = input.Trim();
+        if (double.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out var invariantNumber))
+        {
+            return invariantNumber;
+        }
+
+        if (double.TryParse(input, NumberStyles.Float, CultureInfo.CurrentCulture, out var currentNumber))
+        {
+            return currentNumber;
+        }
+
+        if (bool.TryParse(input, out var boolean))
+        {
+            return boolean;
+        }
+
+        return input;
     }
 
     private object? Evaluate(string expression, int lineNumber)

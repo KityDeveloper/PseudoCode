@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool _isHelpVisible = true;
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
+    private ExecutionResult? _lastExecutionResult;
 
     public MainWindow()
     {
@@ -75,6 +76,8 @@ public partial class MainWindow : Window
         EditorTextBox.Text = SampleProgram;
         OutputTextBox.Text = string.Empty;
         VariablesTextBox.Text = string.Empty;
+        HideConsoleInput();
+        _lastExecutionResult = null;
         _currentFile = null;
         _hasUnsavedChanges = false;
         CurrentPathText.Text = "Sin guardar";
@@ -83,10 +86,23 @@ public partial class MainWindow : Window
 
     private void Run_Click(object? sender, RoutedEventArgs e)
     {
-        var result = _interpreter.Run(EditorTextBox.Text ?? string.Empty);
-        OutputTextBox.Text = BuildOutputText(result);
-        VariablesTextBox.Text = BuildVariablesText(result);
-        UpdateWindowState(result.Success ? "Ejecucion completada" : "Ejecucion con diagnosticos");
+        HideConsoleInput();
+        _lastExecutionResult = _interpreter.Start(EditorTextBox.Text ?? string.Empty);
+        ShowExecutionResult(_lastExecutionResult);
+    }
+
+    private void SendConsoleInput_Click(object? sender, RoutedEventArgs e)
+    {
+        SendConsoleInput();
+    }
+
+    private void ConsoleInput_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            SendConsoleInput();
+            e.Handled = true;
+        }
     }
 
     private void SelectAll_Click(object? sender, RoutedEventArgs e)
@@ -100,6 +116,8 @@ public partial class MainWindow : Window
     {
         OutputTextBox.Text = string.Empty;
         VariablesTextBox.Text = string.Empty;
+        HideConsoleInput();
+        _lastExecutionResult = null;
         UpdateWindowState("Salida limpia");
     }
 
@@ -181,8 +199,54 @@ public partial class MainWindow : Window
         CurrentPathText.Text = file.Path.LocalPath;
         OutputTextBox.Text = string.Empty;
         VariablesTextBox.Text = string.Empty;
+        HideConsoleInput();
+        _lastExecutionResult = null;
         UpdateLineNumbers();
         UpdateWindowState($"Abierto: {file.Name}");
+    }
+
+    private void SendConsoleInput()
+    {
+        if (_lastExecutionResult?.WaitingForInput != true)
+        {
+            HideConsoleInput();
+            return;
+        }
+
+        var input = ConsoleInputTextBox.Text ?? string.Empty;
+        ConsoleInputTextBox.Text = string.Empty;
+        _lastExecutionResult = _interpreter.Continue(input);
+        ShowExecutionResult(_lastExecutionResult);
+    }
+
+    private void ShowExecutionResult(ExecutionResult result)
+    {
+        OutputTextBox.Text = BuildOutputText(result);
+        VariablesTextBox.Text = BuildVariablesText(result);
+
+        if (result.WaitingForInput)
+        {
+            ShowConsoleInput(result.InputVariable ?? "valor");
+            UpdateWindowState($"Esperando entrada: {result.InputVariable}");
+        }
+        else
+        {
+            HideConsoleInput();
+            UpdateWindowState(result.Success ? "Ejecucion completada" : "Ejecucion con diagnosticos");
+        }
+    }
+
+    private void ShowConsoleInput(string variableName)
+    {
+        ConsoleInputPrompt.Text = $"{variableName}:";
+        ConsoleInputPanel.IsVisible = true;
+        ConsoleInputTextBox.Focus();
+    }
+
+    private void HideConsoleInput()
+    {
+        ConsoleInputPanel.IsVisible = false;
+        ConsoleInputTextBox.Text = string.Empty;
     }
 
     private void ConfigureEditor()
@@ -493,6 +557,8 @@ public partial class MainWindow : Window
         EditorTextBox.Text = topic.Example;
         OutputTextBox.Text = string.Empty;
         VariablesTextBox.Text = string.Empty;
+        HideConsoleInput();
+        _lastExecutionResult = null;
         _currentFile = null;
         _hasUnsavedChanges = true;
         CurrentPathText.Text = "Ejemplo de ayuda";
@@ -590,7 +656,7 @@ public partial class MainWindow : Window
         new("Algoritmo", "Algoritmo MiPrograma\n    \nFinAlgoritmo", "Define el inicio y fin de un algoritmo.", true),
         new("Definir", "Definir variable Como Entero", "Declara una o varias variables.", true),
         new("Escribir", "Escribir \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
-        new("Leer", "Leer variable", "Lee un valor; por ahora usa entrada simulada.", true),
+        new("Leer", "Leer variable", "Espera un valor en la consola antes de continuar.", true),
         new("Si", "Si condicion Entonces\n    \nFinSi", "Bloque condicional.", true),
         new("Si/Sino", "Si condicion Entonces\n    \nSino\n    \nFinSi", "Condicional con alternativa.", true),
         new("Mientras", "Mientras condicion Hacer\n    \nFinMientras", "Repite mientras se cumpla una condicion.", true),
@@ -635,7 +701,7 @@ FinAlgoritmo
 """),
         new(
             "Entrada y salida",
-            "Leer usa una entrada simulada y Escribir muestra texto en la salida.",
+            "Leer pausa la ejecucion hasta que escribas un valor en la consola.",
             """
 Algoritmo EntradaSalida
     Definir numero Como Entero

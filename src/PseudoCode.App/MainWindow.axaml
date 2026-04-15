@@ -153,16 +153,45 @@
         </Border>
 
         <Grid Grid.Row="1" ColumnDefinitions="2*,*" Background="{StaticResource OutputBackground}">
-          <TextBox x:Name="OutputTextBox"
-                   IsReadOnly="True"
-                   TextWrapping="Wrap"
-                   Background="{StaticResource OutputBackground}"
-                   Foreground="{StaticResource TextPrimary}"
-                   BorderThickness="0"
-                   FontFamily="Cascadia Code,Consolas,monospace"
-                   FontSize="13"
-                   Padding="14"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          <Grid RowDefinitions="*,Auto">
+            <TextBox x:Name="OutputTextBox"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     Background="{StaticResource OutputBackground}"
+                     Foreground="{StaticResource TextPrimary}"
+                     BorderThickness="0"
+                     FontFamily="Cascadia Code,Consolas,monospace"
+                     FontSize="13"
+                     Padding="14"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+            <Border Grid.Row="1"
+                    x:Name="ConsoleInputPanel"
+                    IsVisible="False"
+                    Background="{StaticResource PanelBackground}"
+                    BorderBrush="{StaticResource BorderBrushMuted}"
+                    BorderThickness="0,1,0,0"
+                    Padding="10">
+              <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <TextBlock x:Name="ConsoleInputPrompt"
+                           Text="Entrada:"
+                           Foreground="{StaticResource TextPrimary}"
+                           VerticalAlignment="Center" />
+                <TextBox Grid.Column="1"
+                         x:Name="ConsoleInputTextBox"
+                         Watermark="Escribe un valor y presiona Enter"
+                         KeyDown="ConsoleInput_KeyDown"
+                         Background="{StaticResource EditorBackground}"
+                         Foreground="{StaticResource TextPrimary}"
+                         BorderBrush="{StaticResource BorderBrushMuted}"
+                         FontFamily="Cascadia Code,Consolas,monospace" />
+                <Button Grid.Column="2"
+                        Classes="command"
+                        Click="SendConsoleInput_Click"
+                        Content="Enviar" />
+              </Grid>
+            </Border>
+          </Grid>
           <TextBox Grid.Column="1"
                    x:Name="VariablesTextBox"
                    IsReadOnly="True"
