@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:edit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
         x:Class="PseudoCode.App.MainWindow"
         Title="PseudoCode"
         Icon="/Assets/iconKityDev.png"
@@ -130,37 +131,17 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" ColumnDefinitions="64,*" Background="{StaticResource EditorBackground}">
-        <Border Grid.Column="0" Background="{StaticResource LineNumberBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
-          <TextBlock x:Name="LineNumbersText"
-                     Margin="0,12,12,12"
-                     TextAlignment="Right"
-                     Foreground="{StaticResource LineNumberText}"
-                     FontFamily="Cascadia Code,Consolas,monospace"
-                     FontSize="15"
-                     LineHeight="23" />
-        </Border>
-
-        <TextBox Grid.Column="1"
-                 x:Name="EditorTextBox"
-                 AcceptsReturn="True"
-                 AcceptsTab="True"
-                 TextWrapping="NoWrap"
-                 TextChanged="Editor_TextChanged"
-                 Background="{StaticResource EditorBackground}"
-                 Foreground="{StaticResource TextPrimary}"
-                 BorderThickness="0"
-                 CaretBrush="{StaticResource CaretBrush}"
-                 SelectionBrush="{StaticResource SelectionBrush}"
-                 FontFamily="Cascadia Code,Consolas,monospace"
-                 FontSize="15"
-                 LineHeight="23"
-                 Padding="14,12"
-                 VerticalContentAlignment="Top"
-                 HorizontalContentAlignment="Left"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
-      </Grid>
+      <edit:TextEditor Grid.Row="1"
+                       x:Name="EditorTextBox"
+                       ShowLineNumbers="True"
+                       TextChanged="Editor_TextChanged"
+                       Background="{StaticResource EditorBackground}"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontFamily="Cascadia Code,Consolas,monospace"
+                       FontSize="15"
+                       Padding="14,12"
+                       HorizontalScrollBarVisibility="Auto"
+                       VerticalScrollBarVisibility="Auto" />
 
       <Grid Grid.Row="2" RowDefinitions="34,*" Background="{StaticResource EditorBackground}">
         <Border BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,1,0,1" Background="{StaticResource PanelBackground}">
@@ -211,7 +192,7 @@
             Background="{StaticResource PanelBackground}"
             BorderBrush="{StaticResource BorderBrushMuted}"
             BorderThickness="1,0,0,0">
-      <Grid RowDefinitions="Auto,*">
+      <Grid RowDefinitions="Auto,Auto,*">
         <Grid ColumnDefinitions="*,Auto" Margin="14,12,14,8">
           <TextBlock Text="AYUDA POR TEMAS"
                      Foreground="{StaticResource TextSecondary}"
@@ -221,7 +202,37 @@
           <Button Grid.Column="1" Classes="command" Click="ToggleHelp_Click" Content="Ocultar" Padding="8,4" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" Margin="14,0,14,14">
+        <ScrollViewer Grid.Row="1" Margin="14,0,14,10" MaxHeight="250">
+          <StackPanel Spacing="12">
+            <TextBlock Text="PLANTILLAS"
+                       Foreground="{StaticResource TextSecondary}"
+                       FontSize="12"
+                       FontWeight="SemiBold" />
+            <WrapPanel x:Name="TemplatesPanel" Orientation="Horizontal" />
+
+            <TextBlock Text="LISTADOS"
+                       Foreground="{StaticResource TextSecondary}"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Margin="0,8,0,0" />
+            <TextBlock Text="Funciones y comandos"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontWeight="SemiBold" />
+            <ItemsControl x:Name="CommandsList" />
+            <TextBlock Text="Operadores"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontWeight="SemiBold"
+                       Margin="0,8,0,0" />
+            <ItemsControl x:Name="OperatorsList" />
+            <TextBlock Text="Variables detectadas"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontWeight="SemiBold"
+                       Margin="0,8,0,0" />
+            <ItemsControl x:Name="VariablesList" />
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="2" Margin="14,0,14,14">
           <StackPanel x:Name="HelpTopicsPanel" Spacing="10" />
         </ScrollViewer>
       </Grid>

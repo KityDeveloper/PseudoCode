@@ -1,10 +1,15 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using AvaloniaEdit.CodeCompletion;
+using AvaloniaEdit.Document;
+using AvaloniaEdit.Editing;
+using AvaloniaEdit.Rendering;
 using PseudoCode.App.Services;
 
 namespace PseudoCode.App;
@@ -16,12 +21,15 @@ public partial class MainWindow : Window
     private bool _hasUnsavedChanges;
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
+    private CompletionWindow? _completionWindow;
 
     public MainWindow()
     {
         InitializeComponent();
+        ConfigureEditor();
         EditorTextBox.Text = SampleProgram;
         _hasUnsavedChanges = false;
+        BuildEditorTools();
         BuildHelpTopics();
         DragDrop.SetAllowDrop(this, true);
         DragDrop.SetAllowDrop(EditorTextBox, true);
@@ -116,10 +124,11 @@ public partial class MainWindow : Window
         UpdateWindowState(_isLightTheme ? "Modo claro activado" : "Modo oscuro activado");
     }
 
-    private void Editor_TextChanged(object? sender, TextChangedEventArgs e)
+    private void Editor_TextChanged(object? sender, EventArgs e)
     {
         _hasUnsavedChanges = true;
         UpdateLineNumbers();
+        UpdateVariablesList();
         UpdateWindowState("Editando");
     }
 
@@ -175,6 +184,140 @@ public partial class MainWindow : Window
         UpdateWindowState($"Abierto: {file.Name}");
     }
 
+    private void ConfigureEditor()
+    {
+        EditorTextBox.Options.ConvertTabsToSpaces = true;
+        EditorTextBox.Options.IndentationSize = 4;
+        EditorTextBox.TextArea.TextView.LineTransformers.Add(new PseudoCodeColorizer());
+        EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
+        EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
+        EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
+    }
+
+    private void Editor_TextEntered(object? sender, TextInputEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.Text))
+        {
+            return;
+        }
+
+        if (char.IsLetter(e.Text[0]))
+        {
+            ShowCompletion();
+        }
+    }
+
+    private void Editor_TextEntering(object? sender, TextInputEventArgs e)
+    {
+        if (_completionWindow is not null && !string.IsNullOrEmpty(e.Text) && !char.IsLetterOrDigit(e.Text[0]))
+        {
+            _completionWindow.CompletionList.RequestInsertion(e);
+        }
+    }
+
+    private void Editor_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            ShowCompletion(force: true);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Tab)
+        {
+            InsertAtCaret("    ");
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter && _completionWindow is null)
+        {
+            InsertSmartNewLine();
+            e.Handled = true;
+        }
+    }
+
+    private void ShowCompletion(bool force = false)
+    {
+        var prefix = GetCurrentWord();
+        if (!force && prefix.Length < 2)
+        {
+            return;
+        }
+
+        var matches = CompletionItems
+            .Where(item => item.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.Text.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(item => item.Text)
+            .ToArray();
+
+        if (matches.Length == 0 && !force)
+        {
+            return;
+        }
+
+        _completionWindow?.Close();
+        _completionWindow = new CompletionWindow(EditorTextBox.TextArea)
+        {
+            Width = 360,
+            Height = 260
+        };
+        _completionWindow.Closed += (_, _) => _completionWindow = null;
+
+        var data = _completionWindow.CompletionList.CompletionData;
+        foreach (var item in matches.Length == 0 ? CompletionItems : matches)
+        {
+            data.Add(new PseudoCompletionData(item));
+        }
+
+        _completionWindow.Show();
+    }
+
+    private string GetCurrentWord()
+    {
+        var offset = EditorTextBox.CaretOffset;
+        var document = EditorTextBox.Document;
+        var start = offset;
+
+        while (start > 0)
+        {
+            var character = document.GetCharAt(start - 1);
+            if (!char.IsLetterOrDigit(character) && character != '_')
+            {
+                break;
+            }
+
+            start--;
+        }
+
+        return document.GetText(start, offset - start);
+    }
+
+    private void InsertSmartNewLine()
+    {
+        var document = EditorTextBox.Document;
+        var offset = EditorTextBox.CaretOffset;
+        var line = document.GetLineByOffset(offset);
+        var lineText = document.GetText(line.Offset, offset - line.Offset);
+        var currentIndent = Regex.Match(lineText, @"^\s*").Value;
+        var trimmed = lineText.Trim();
+        var nextIndent = currentIndent;
+
+        if (StartsLogicalBlock(trimmed))
+        {
+            nextIndent += "    ";
+        }
+
+        InsertAtCaret(Environment.NewLine + nextIndent);
+    }
+
+    private void InsertAtCaret(string text)
+    {
+        EditorTextBox.Document.Insert(EditorTextBox.CaretOffset, text);
+        EditorTextBox.CaretOffset += text.Length;
+    }
+
     private void Editor_DragOver(object? sender, DragEventArgs e)
     {
         var hasFiles = e.DataTransfer.TryGetFiles()?.Any() == true;
@@ -198,7 +341,6 @@ public partial class MainWindow : Window
     {
         var text = EditorTextBox.Text ?? string.Empty;
         var lines = Math.Max(1, text.Count(character => character == '\n') + 1);
-        LineNumbersText.Text = string.Join(Environment.NewLine, Enumerable.Range(1, lines));
         CursorStatusText.Text = $"Lineas: {lines}";
     }
 
@@ -272,6 +414,77 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BuildEditorTools()
+    {
+        foreach (var template in CompletionItems.Where(item => item.IsTemplate))
+        {
+            var button = new Button
+            {
+                Content = template.Text,
+                Margin = new Avalonia.Thickness(0, 0, 6, 6),
+                Padding = new Avalonia.Thickness(8, 5),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            button.Classes.Add("command");
+            ToolTip.SetTip(button, template.Description);
+            button.Click += (_, _) => InsertCommandTemplate(template.InsertText);
+            TemplatesPanel.Children.Add(button);
+        }
+
+        CommandsList.ItemsSource = CompletionItems
+            .Select(item => $"{item.Text} - {item.Description}")
+            .ToArray();
+        OperatorsList.ItemsSource = new[]
+        {
+            "<- asignacion",
+            "+ suma",
+            "- resta",
+            "* multiplicacion",
+            "/ division",
+            "% modulo",
+            "= igual",
+            "<> diferente",
+            "< <= > >= comparaciones",
+            "Y, O, NO operadores logicos"
+        };
+        UpdateVariablesList();
+    }
+
+    private void InsertCommandTemplate(string template)
+    {
+        InsertAtCaret(template);
+        EditorTextBox.Focus();
+        UpdateWindowState("Plantilla insertada");
+    }
+
+    private void UpdateVariablesList()
+    {
+        var names = ExtractVariables(EditorTextBox.Text ?? string.Empty).ToArray();
+        VariablesList.ItemsSource = names.Length == 0 ? new[] { "Sin variables todavia" } : names;
+    }
+
+    private static IEnumerable<string> ExtractVariables(string source)
+    {
+        var variables = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in Regex.Matches(source, @"(?im)^\s*Definir\s+(.+?)(?:\s+Como\s+\w+)?\s*$"))
+        {
+            foreach (var name in match.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+                {
+                    variables.Add(name);
+                }
+            }
+        }
+
+        foreach (Match match in Regex.Matches(source, @"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*<-"))
+        {
+            variables.Add(match.Groups[1].Value);
+        }
+
+        return variables;
+    }
+
     private void LoadHelpExample(HelpTopic topic)
     {
         EditorTextBox.Text = topic.Example;
@@ -296,6 +509,12 @@ public partial class MainWindow : Window
     }
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
+
+    private static bool StartsLogicalBlock(string text) =>
+        StartsWithAny(text, "Algoritmo ", "Proceso ", "Si ", "Mientras ", "Para ", "Segun ");
+
+    private static bool StartsWithAny(string text, params string[] prefixes) =>
+        prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static string BuildOutputText(ExecutionResult result)
     {
@@ -343,6 +562,28 @@ public partial class MainWindow : Window
     }
 
     private sealed record HelpTopic(string Title, string Description, string Example, bool IsExpanded = false);
+
+    private static readonly CommandInfo[] CompletionItems =
+    [
+        new("Algoritmo", "Algoritmo MiPrograma\n    \nFinAlgoritmo", "Define el inicio y fin de un algoritmo.", true),
+        new("Definir", "Definir variable Como Entero", "Declara una o varias variables.", true),
+        new("Escribir", "Escribir \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
+        new("Leer", "Leer variable", "Lee un valor; por ahora usa entrada simulada.", true),
+        new("Si", "Si condicion Entonces\n    \nFinSi", "Bloque condicional.", true),
+        new("Si/Sino", "Si condicion Entonces\n    \nSino\n    \nFinSi", "Condicional con alternativa.", true),
+        new("Mientras", "Mientras condicion Hacer\n    \nFinMientras", "Repite mientras se cumpla una condicion.", true),
+        new("Para", "Para i <- 1 Hasta 10 Hacer\n    \nFinPara", "Repite con contador.", true),
+        new("Segun", "Segun opcion Hacer\n    1:\n        \nFinSegun", "Seleccion multiple.", true),
+        new("Entero", "Entero", "Tipo numerico entero."),
+        new("Real", "Real", "Tipo numerico decimal."),
+        new("Cadena", "Cadena", "Tipo de texto."),
+        new("Logico", "Logico", "Tipo verdadero/falso."),
+        new("Verdadero", "Verdadero", "Valor logico verdadero."),
+        new("Falso", "Falso", "Valor logico falso."),
+        new("Y", "Y", "Operador logico AND."),
+        new("O", "O", "Operador logico OR."),
+        new("NO", "NO", "Negacion logica.")
+    ];
 
     private static readonly HelpTopic[] HelpTopics =
     [
@@ -457,4 +698,104 @@ Algoritmo Saludo
     Escribir "Edad: ", edad
 FinAlgoritmo
 """;
+}
+
+internal sealed record CommandInfo(string Text, string InsertText, string Description, bool IsTemplate = false);
+
+internal sealed class PseudoCompletionData(CommandInfo item) : ICompletionData
+{
+    public IImage? Image => null;
+
+    public string Text => item.Text;
+
+    public object Content => item.Text;
+
+    public object Description => item.Description;
+
+    public double Priority => item.IsTemplate ? 1 : 0;
+
+    public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
+    {
+        textArea.Document.Replace(completionSegment, item.InsertText);
+    }
+}
+
+internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
+{
+    private static readonly Regex StringLiteral = new("\"[^\"]*\"", RegexOptions.Compiled);
+    private static readonly Regex NumberLiteral = new(@"\b\d+(\.\d+)?\b", RegexOptions.Compiled);
+    private static readonly Regex TypeName = new(@"\b(Entero|Real|Cadena|Logico|Caracter)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex Operator = new(@"(<-|<=|>=|<>|=|<|>|\+|-|\*|/|%)", RegexOptions.Compiled);
+    private static readonly Regex Keyword = new(@"\b(Algoritmo|Proceso|FinAlgoritmo|FinProceso|Definir|Como|Escribir|Leer|Si|Entonces|Sino|FinSi|Mientras|Hacer|FinMientras|Para|Hasta|Con|Paso|FinPara|Segun|FinSegun|Verdadero|Falso|Y|O|NO)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex BlockLine = new(@"^\s*(Algoritmo|Proceso|Si|Sino|FinSi|Mientras|FinMientras|Para|FinPara|Segun|FinSegun|FinAlgoritmo|FinProceso)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly IBrush KeywordBrush = Brush("#5EA1FF");
+    private static readonly IBrush TypeBrush = Brush("#4EC9B0");
+    private static readonly IBrush StringBrush = Brush("#CE9178");
+    private static readonly IBrush NumberBrush = Brush("#B5CEA8");
+    private static readonly IBrush OperatorBrush = Brush("#DCDCAA");
+    private static readonly IBrush CommentBrush = Brush("#6A9955");
+    private static readonly IBrush BlockBrush = Brush("#1F3B4D");
+
+    protected override void ColorizeLine(DocumentLine line)
+    {
+        var text = CurrentContext.Document.GetText(line);
+
+        if (BlockLine.IsMatch(text))
+        {
+            ChangeLinePart(line.Offset, line.EndOffset, element =>
+            {
+                element.TextRunProperties.SetBackgroundBrush(BlockBrush);
+            });
+        }
+
+        var commentIndex = FindCommentIndex(text);
+        var codeLength = commentIndex >= 0 ? commentIndex : text.Length;
+
+        ApplyMatches(line, text, Keyword, KeywordBrush, codeLength);
+        ApplyMatches(line, text, TypeName, TypeBrush, codeLength);
+        ApplyMatches(line, text, StringLiteral, StringBrush, codeLength);
+        ApplyMatches(line, text, NumberLiteral, NumberBrush, codeLength);
+        ApplyMatches(line, text, Operator, OperatorBrush, codeLength);
+
+        if (commentIndex >= 0)
+        {
+            ChangeLinePart(line.Offset + commentIndex, line.EndOffset, element =>
+            {
+                element.TextRunProperties.SetForegroundBrush(CommentBrush);
+            });
+        }
+    }
+
+    private void ApplyMatches(DocumentLine line, string text, Regex regex, IBrush brush, int codeLength)
+    {
+        foreach (Match match in regex.Matches(text[..codeLength]))
+        {
+            ChangeLinePart(line.Offset + match.Index, line.Offset + match.Index + match.Length, element =>
+            {
+                element.TextRunProperties.SetForegroundBrush(brush);
+            });
+        }
+    }
+
+    private static int FindCommentIndex(string text)
+    {
+        var inString = false;
+        for (var index = 0; index < text.Length - 1; index++)
+        {
+            if (text[index] == '"')
+            {
+                inString = !inString;
+            }
+
+            if (!inString && text[index] == '/' && text[index + 1] == '/')
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
 }
