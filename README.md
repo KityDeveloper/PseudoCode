@@ -43,6 +43,19 @@ El proyecto incluye dos perfiles:
 
 ## Publicar
 
+### Release automatico con aprobacion
+
+El workflow `Release` de GitHub Actions se ejecuta manualmente desde la pestana **Actions**. Pide un tag como `v1.0.0`, compila Windows y Linux, espera aprobacion en el environment `release`, y despues crea el tag y el GitHub Release con los paquetes:
+
+- `PseudoCode-linux-x64-vX.Y.Z.tar.gz`
+- `PseudoCode-win-x64-vX.Y.Z.zip`
+
+Para que GitHub pida aprobacion antes de publicar, configura el environment en el repositorio:
+
+1. Ve a **Settings > Environments**.
+2. Crea un environment llamado `release`.
+3. Activa **Required reviewers** y agregate como reviewer.
+
 Linux x64:
 
 ```bash
