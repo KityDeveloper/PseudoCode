@@ -3,5 +3,6 @@ Type=Application
 Name=PseudoCode
 Comment=Editor educativo de pseudocodigo
 Exec=pseudocode
+Icon=pseudocode
 Terminal=false
 Categories=Development;Education;

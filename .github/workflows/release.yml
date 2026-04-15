@@ -93,9 +93,10 @@ jobs:
           app_dir="$package_root/opt/pseudocode"
 
           rm -rf "$package_root" "$deb_root" rpmbuild
-          mkdir -p "$app_dir" "$package_root/usr/bin" "$package_root/usr/share/applications"
+          mkdir -p "$app_dir" "$package_root/usr/bin" "$package_root/usr/share/applications" "$package_root/usr/share/icons/hicolor/256x256/apps"
           cp -R publish/${{ matrix.output }}/. "$app_dir/"
           cp packaging/linux/pseudocode.desktop "$package_root/usr/share/applications/pseudocode.desktop"
+          cp resources/images/iconKityDev.png "$package_root/usr/share/icons/hicolor/256x256/apps/pseudocode.png"
           cat > "$package_root/usr/bin/pseudocode" <<'EOF'
           #!/usr/bin/env sh
           exec /opt/pseudocode/PseudoCode.App "$@"
@@ -146,6 +147,7 @@ jobs:
           /opt/pseudocode
           /usr/bin/pseudocode
           /usr/share/applications/pseudocode.desktop
+          /usr/share/icons/hicolor/256x256/apps/pseudocode.png
           EOF
           rpmbuild --define "_topdir $PWD/rpmbuild" -bb rpmbuild/SPECS/pseudocode.spec
           cp rpmbuild/RPMS/x86_64/*.rpm "dist/${package_name}-${version}.x86_64.rpm"
