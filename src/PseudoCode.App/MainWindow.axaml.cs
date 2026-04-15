@@ -1,6 +1,8 @@
 using System.Text;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using PseudoCode.App.Services;
@@ -13,6 +15,7 @@ public partial class MainWindow : Window
     private IStorageFile? _currentFile;
     private bool _hasUnsavedChanges;
     private bool _isLightTheme;
+    private bool _isHelpVisible = true;
 
     public MainWindow()
     {
@@ -20,6 +23,10 @@ public partial class MainWindow : Window
         EditorTextBox.Text = SampleProgram;
         _hasUnsavedChanges = false;
         BuildHelpTopics();
+        DragDrop.SetAllowDrop(this, true);
+        DragDrop.SetAllowDrop(EditorTextBox, true);
+        AddHandler(DragDrop.DragOverEvent, Editor_DragOver);
+        AddHandler(DragDrop.DropEvent, Editor_Drop);
         UpdateLineNumbers();
         UpdateWindowState("Listo para escribir pseudocodigo");
     }
@@ -46,13 +53,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await using var stream = await file.OpenReadAsync();
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        EditorTextBox.Text = await reader.ReadToEndAsync();
-        _currentFile = file;
-        _hasUnsavedChanges = false;
-        CurrentPathText.Text = file.Path.LocalPath;
-        UpdateWindowState($"Abierto: {file.Name}");
+        await LoadFileAsync(file);
     }
 
     private async void SaveFile_Click(object? sender, RoutedEventArgs e)
@@ -77,6 +78,34 @@ public partial class MainWindow : Window
         OutputTextBox.Text = BuildOutputText(result);
         VariablesTextBox.Text = BuildVariablesText(result);
         UpdateWindowState(result.Success ? "Ejecucion completada" : "Ejecucion con diagnosticos");
+    }
+
+    private void SelectAll_Click(object? sender, RoutedEventArgs e)
+    {
+        EditorTextBox.Focus();
+        EditorTextBox.SelectAll();
+        UpdateWindowState("Texto seleccionado");
+    }
+
+    private void ClearOutput_Click(object? sender, RoutedEventArgs e)
+    {
+        OutputTextBox.Text = string.Empty;
+        VariablesTextBox.Text = string.Empty;
+        UpdateWindowState("Salida limpia");
+    }
+
+    private void ToggleHelp_Click(object? sender, RoutedEventArgs e)
+    {
+        _isHelpVisible = !_isHelpVisible;
+        HelpPanel.IsVisible = _isHelpVisible;
+        MainLayout.ColumnDefinitions[3].Width = _isHelpVisible ? new GridLength(6) : new GridLength(0);
+        MainLayout.ColumnDefinitions[4].Width = _isHelpVisible ? new GridLength(340) : new GridLength(0);
+        UpdateWindowState(_isHelpVisible ? "Ayuda visible" : "Ayuda oculta");
+    }
+
+    private void LoadFirstHelpExample_Click(object? sender, RoutedEventArgs e)
+    {
+        LoadHelpExample(HelpTopics[0]);
     }
 
     private void ThemeToggle_Click(object? sender, RoutedEventArgs e)
@@ -132,6 +161,39 @@ public partial class MainWindow : Window
         UpdateWindowState($"Guardado: {file.Name}");
     }
 
+    private async Task LoadFileAsync(IStorageFile file)
+    {
+        await using var stream = await file.OpenReadAsync();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        EditorTextBox.Text = await reader.ReadToEndAsync();
+        _currentFile = file;
+        _hasUnsavedChanges = false;
+        CurrentPathText.Text = file.Path.LocalPath;
+        OutputTextBox.Text = string.Empty;
+        VariablesTextBox.Text = string.Empty;
+        UpdateLineNumbers();
+        UpdateWindowState($"Abierto: {file.Name}");
+    }
+
+    private void Editor_DragOver(object? sender, DragEventArgs e)
+    {
+        var hasFiles = e.DataTransfer.TryGetFiles()?.Any() == true;
+        e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = hasFiles;
+    }
+
+    private async void Editor_Drop(object? sender, DragEventArgs e)
+    {
+        var file = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().FirstOrDefault();
+        if (file is null)
+        {
+            return;
+        }
+
+        await LoadFileAsync(file);
+        e.Handled = true;
+    }
+
     private void UpdateLineNumbers()
     {
         var text = EditorTextBox.Text ?? string.Empty;
@@ -158,15 +220,24 @@ public partial class MainWindow : Window
                 Margin = new Avalonia.Thickness(0, 0, 0, 8)
             };
 
-            var preview = new TextBlock
+            var preview = new TextBox
             {
                 Text = topic.Example,
+                IsReadOnly = true,
+                AcceptsReturn = true,
                 TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
+                Background = Brush("EditorBackground"),
                 Foreground = Brush("TextPrimary"),
+                BorderBrush = Brush("BorderBrushMuted"),
+                BorderThickness = new Avalonia.Thickness(1),
                 FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
                 FontSize = 12,
+                Height = 140,
+                Padding = new Avalonia.Thickness(8),
                 Margin = new Avalonia.Thickness(0, 0, 0, 8)
             };
+            ScrollViewer.SetHorizontalScrollBarVisibility(preview, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+            ScrollViewer.SetVerticalScrollBarVisibility(preview, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
 
             var loadButton = new Button
             {

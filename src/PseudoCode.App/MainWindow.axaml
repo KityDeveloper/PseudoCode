@@ -55,15 +55,29 @@
     </Style>
   </Window.Styles>
 
-  <Grid RowDefinitions="36,*,24" ColumnDefinitions="48,260,*">
-    <Border Grid.Row="0" Grid.ColumnSpan="3" Background="{StaticResource TopBarBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
+  <Grid x:Name="MainLayout" RowDefinitions="36,*,24" ColumnDefinitions="48,260,*,6,340">
+    <Border Grid.Row="0" Grid.ColumnSpan="5" Background="{StaticResource TopBarBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
           <TextBlock Text="PseudoCode" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
-          <TextBlock Text="Archivo" Foreground="{StaticResource TextSecondary}" />
-          <TextBlock Text="Editar" Foreground="{StaticResource TextSecondary}" />
-          <TextBlock Text="Ejecutar" Foreground="{StaticResource TextSecondary}" />
-          <TextBlock Text="Ayuda" Foreground="{StaticResource TextSecondary}" />
+          <Menu Background="Transparent" Foreground="{StaticResource TextSecondary}">
+            <MenuItem Header="Archivo">
+              <MenuItem Header="Nuevo algoritmo" Click="NewFile_Click" />
+              <MenuItem Header="Abrir..." Click="OpenFile_Click" />
+              <MenuItem Header="Guardar" Click="SaveFile_Click" />
+            </MenuItem>
+            <MenuItem Header="Editar">
+              <MenuItem Header="Seleccionar todo" Click="SelectAll_Click" />
+              <MenuItem Header="Limpiar salida" Click="ClearOutput_Click" />
+            </MenuItem>
+            <MenuItem Header="Ejecutar">
+              <MenuItem Header="Ejecutar algoritmo" Click="Run_Click" />
+            </MenuItem>
+            <MenuItem Header="Ayuda">
+              <MenuItem Header="Mostrar u ocultar ayuda" Click="ToggleHelp_Click" />
+              <MenuItem Header="Cargar ejemplo inicial" Click="LoadFirstHelpExample_Click" />
+            </MenuItem>
+          </Menu>
         </StackPanel>
         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
           <Button x:Name="ThemeToggleButton" Classes="command" Click="ThemeToggle_Click" Content="Modo claro" Padding="10,4" />
@@ -85,7 +99,7 @@
     </Border>
 
     <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
-      <Grid RowDefinitions="Auto,Auto,*,Auto,190">
+      <Grid RowDefinitions="Auto,Auto,*">
         <TextBlock Classes="panel-title" Text="EXPLORADOR" />
         <StackPanel Grid.Row="1" Margin="14,0,14,12" Spacing="8">
           <Button Classes="command" Click="NewFile_Click" Content="Nuevo algoritmo" HorizontalAlignment="Stretch" />
@@ -99,11 +113,6 @@
             <TextBlock x:Name="CurrentPathText" Text="Sin guardar" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
-
-        <TextBlock Grid.Row="3" Classes="panel-title" Text="AYUDA POR TEMAS" />
-        <ScrollViewer Grid.Row="4" Margin="14,0,14,14">
-          <StackPanel x:Name="HelpTopicsPanel" Spacing="8" />
-        </ScrollViewer>
       </Grid>
     </Border>
 
@@ -188,7 +197,37 @@
       </Grid>
     </Grid>
 
-    <Border Grid.Row="2" Grid.ColumnSpan="3" Background="{StaticResource AccentBlue}">
+    <GridSplitter Grid.Row="1"
+                  Grid.Column="3"
+                  Background="{StaticResource BorderBrushMuted}"
+                  ResizeDirection="Columns"
+                  ResizeBehavior="PreviousAndNext"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch" />
+
+    <Border x:Name="HelpPanel"
+            Grid.Row="1"
+            Grid.Column="4"
+            Background="{StaticResource PanelBackground}"
+            BorderBrush="{StaticResource BorderBrushMuted}"
+            BorderThickness="1,0,0,0">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Margin="14,12,14,8">
+          <TextBlock Text="AYUDA POR TEMAS"
+                     Foreground="{StaticResource TextSecondary}"
+                     FontSize="12"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="command" Click="ToggleHelp_Click" Content="Ocultar" Padding="8,4" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Margin="14,0,14,14">
+          <StackPanel x:Name="HelpTopicsPanel" Spacing="10" />
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="2" Grid.ColumnSpan="5" Background="{StaticResource AccentBlue}">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
         <TextBlock Text=".NET 8 + Avalonia" Foreground="White" VerticalAlignment="Center" FontSize="12" />
         <TextBlock Grid.Column="2" x:Name="CursorStatusText" Text="Linea 1, Columna 1" Foreground="White" VerticalAlignment="Center" FontSize="12" />
