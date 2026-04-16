@@ -24,9 +24,14 @@ public partial class MainWindow : Window
     private const double MinEditorFontSize = 10;
     private const double MaxEditorFontSize = 30;
     private const double EditorZoomStep = 1;
+    private const double DefaultInterfaceScale = 1;
+    private const double MinInterfaceScale = 0.8;
+    private const double MaxInterfaceScale = 1.4;
+    private const double InterfaceScaleStep = 0.1;
 
     private readonly List<OpenDocument> _openDocuments = [];
     private OpenDocument? _currentDocument;
+    private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
     private bool _isSwitchingDocument;
     private bool _showDiagnostics;
@@ -40,7 +45,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ConfigureEditor();
-        AddNewDocument();
         BuildEditorTools();
         BuildHelpTopics();
         DragDrop.SetAllowDrop(this, true);
@@ -48,8 +52,8 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, Editor_DragOver);
         AddHandler(DragDrop.DropEvent, Editor_Drop);
         UpdateLineNumbers();
+        UpdateEmptyWorkspaceState();
         UpdateWindowState("Listo para escribir pseudocodigo");
-        EditorTextBox.Focus();
     }
 
     private async void OpenFile_Click(object? sender, RoutedEventArgs e)
@@ -124,6 +128,41 @@ public partial class MainWindow : Window
         UpdateOutputPanelView();
     }
 
+    private void Window_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        if (e.Key == Key.N)
+        {
+            AddNewDocument();
+            e.Handled = true;
+            return;
+        }
+
+        if (IsIncreaseKey(e))
+        {
+            ZoomInterface(1);
+            e.Handled = true;
+            return;
+        }
+
+        if (IsDecreaseKey(e))
+        {
+            ZoomInterface(-1);
+            e.Handled = true;
+            return;
+        }
+
+        if (IsResetKey(e))
+        {
+            SetInterfaceScale(DefaultInterfaceScale);
+            e.Handled = true;
+        }
+    }
+
     private void EditorTabs_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         var horizontalDelta = e.Delta.X != 0 ? e.Delta.X : e.Delta.Y;
@@ -192,8 +231,13 @@ public partial class MainWindow : Window
             Title = "Acerca de Kity Dev",
             Width = 420,
             Height = 360,
-            MinWidth = 360,
-            MinHeight = 320,
+            MinWidth = 420,
+            MinHeight = 360,
+            MaxWidth = 420,
+            MaxHeight = 360,
+            CanResize = false,
+            CanMinimize = false,
+            CanMaximize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Brush("PanelBackground"),
             Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png")))
@@ -361,7 +405,7 @@ public partial class MainWindow : Window
         if (_openDocuments.Count == 0)
         {
             _currentDocument = null;
-            AddNewDocument();
+            ClearEditorWorkspace();
             UpdateWindowState($"Cerrado: {document.DisplayName}");
             return;
         }
@@ -378,6 +422,28 @@ public partial class MainWindow : Window
         }
 
         UpdateWindowState($"Cerrado: {document.DisplayName}");
+    }
+
+    private void ClearEditorWorkspace()
+    {
+        _isSwitchingDocument = true;
+        try
+        {
+            EditorTextBox.Text = string.Empty;
+            OutputTextBox.Text = string.Empty;
+            VariablesTextBox.Text = string.Empty;
+            HideConsoleInput();
+        }
+        finally
+        {
+            _isSwitchingDocument = false;
+        }
+
+        RenderOpenDocuments();
+        UpdateDiagnosticUnderlines();
+        UpdateOutputPanelView();
+        UpdateLineNumbers();
+        UpdateEmptyWorkspaceState();
     }
 
     private async Task<CloseDocumentChoice> AskCloseUnsavedDocumentAsync(OpenDocument document)
@@ -577,12 +643,6 @@ public partial class MainWindow : Window
 
     private void Editor_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && TryHandleEditorZoomKey(e))
-        {
-            e.Handled = true;
-            return;
-        }
-
         if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             ShowCompletion(force: true);
@@ -621,6 +681,39 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    private void ZoomInterface(int direction)
+    {
+        SetInterfaceScale(_interfaceScale + direction * InterfaceScaleStep);
+    }
+
+    private void SetInterfaceScale(double scale)
+    {
+        _interfaceScale = Math.Clamp(scale, MinInterfaceScale, MaxInterfaceScale);
+        AppScaleHost.LayoutTransform = new ScaleTransform(_interfaceScale, _interfaceScale);
+        UpdateWindowState($"Zoom interfaz: {_interfaceScale:P0}");
+    }
+
+    private static bool IsIncreaseKey(KeyEventArgs e)
+    {
+        var key = e.Key.ToString();
+        var keySymbol = e.KeySymbol ?? string.Empty;
+        return key is "Add" or "OemPlus" or "Plus" || keySymbol is "+" or "=";
+    }
+
+    private static bool IsDecreaseKey(KeyEventArgs e)
+    {
+        var key = e.Key.ToString();
+        var keySymbol = e.KeySymbol ?? string.Empty;
+        return key is "Subtract" or "OemMinus" or "Minus" || keySymbol is "-" or "_";
+    }
+
+    private static bool IsResetKey(KeyEventArgs e)
+    {
+        var key = e.Key.ToString();
+        var keySymbol = e.KeySymbol ?? string.Empty;
+        return key is "D0" or "NumPad0" || keySymbol is "0";
     }
 
     private bool TryHandleEditorZoomKey(KeyEventArgs e)
@@ -823,6 +916,7 @@ public partial class MainWindow : Window
         UpdateDiagnosticUnderlines();
         UpdateOutputPanelView();
         RenderOpenDocuments();
+        UpdateEmptyWorkspaceState();
         UpdateWindowState($"Activo: {document.DisplayName}");
         EditorTextBox.Focus();
     }
@@ -874,6 +968,13 @@ public partial class MainWindow : Window
             OpenFilesPanel.Children.Add(BuildDocumentButton(document, false));
             EditorTabsPanel.Children.Add(BuildDocumentButton(document, true));
         }
+
+        UpdateEmptyWorkspaceState();
+    }
+
+    private void UpdateEmptyWorkspaceState()
+    {
+        EmptyWorkspacePanel.IsVisible = _openDocuments.Count == 0;
     }
 
     private Control BuildDocumentButton(OpenDocument document, bool isTab)
@@ -1169,6 +1270,22 @@ public partial class MainWindow : Window
             Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center
+        };
+        var copyLinkItem = new MenuItem
+        {
+            Header = "Copiar link"
+        };
+        copyLinkItem.Click += async (_, _) =>
+        {
+            if (Clipboard is not null)
+            {
+                await Clipboard.SetTextAsync(uri);
+                UpdateWindowState("Link copiado");
+            }
+        };
+        link.ContextMenu = new ContextMenu
+        {
+            ItemsSource = new[] { copyLinkItem }
         };
         Grid.SetColumn(link, 1);
         row.Children.Add(link);
