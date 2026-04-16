@@ -124,6 +124,22 @@ public partial class MainWindow : Window
         UpdateOutputPanelView();
     }
 
+    private void EditorTabs_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        var horizontalDelta = e.Delta.X != 0 ? e.Delta.X : e.Delta.Y;
+        if (horizontalDelta == 0)
+        {
+            return;
+        }
+
+        var nextOffset = Math.Clamp(
+            EditorTabsScrollViewer.Offset.X - horizontalDelta * 48,
+            0,
+            EditorTabsScrollViewer.ScrollBarMaximum.X);
+        EditorTabsScrollViewer.Offset = new Vector(nextOffset, EditorTabsScrollViewer.Offset.Y);
+        e.Handled = true;
+    }
+
     private void ConsoleInput_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
@@ -1377,15 +1393,8 @@ FinAlgoritmo
     };
 
     private const string SampleProgram = """
-Algoritmo Saludo
-    Definir nombre Como Cadena
-    Definir edad Como Entero
+Algoritmo
 
-    nombre <- "Ada"
-    edad <- 18 + 1
-
-    Escribir "Hola ", nombre
-    Escribir "Edad: ", edad
 FinAlgoritmo
 """;
 }
