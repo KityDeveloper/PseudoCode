@@ -6,8 +6,9 @@
         Icon="/Assets/logoPseudoCode.png"
         Width="1200"
         Height="760"
-        MinWidth="920"
-        MinHeight="600"
+        MinWidth="760"
+        MinHeight="480"
+        CanResize="True"
         Background="{StaticResource EditorBackground}">
   <Window.Resources>
     <SolidColorBrush x:Key="PanelBackground" Color="#252526" />
@@ -56,7 +57,7 @@
     </Style>
   </Window.Styles>
 
-  <Grid x:Name="MainLayout" RowDefinitions="36,*,24" ColumnDefinitions="48,260,*,6,340">
+  <Grid x:Name="MainLayout" RowDefinitions="36,*,24" ColumnDefinitions="260,6,*,6,340">
     <Border Grid.Row="0" Grid.ColumnSpan="5" Background="{StaticResource TopBarBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
@@ -66,6 +67,7 @@
               <MenuItem Header="Nuevo algoritmo" Click="NewFile_Click" />
               <MenuItem Header="Abrir..." Click="OpenFile_Click" />
               <MenuItem Header="Guardar" Click="SaveFile_Click" />
+              <MenuItem Header="Cerrar archivo" Click="CloseFile_Click" />
             </MenuItem>
             <MenuItem Header="Editar">
               <MenuItem Header="Seleccionar todo" Click="SelectAll_Click" />
@@ -83,24 +85,12 @@
         </StackPanel>
         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
           <Button x:Name="ThemeToggleButton" Classes="command" Click="ThemeToggle_Click" Content="Modo claro" Padding="10,4" />
-          <TextBlock x:Name="WindowStateText"
-                     Text="Listo"
-                     Foreground="{StaticResource TextSecondary}"
-                     VerticalAlignment="Center" />
+          <Button Classes="command" Click="ToggleHelp_Click" Content="?" Padding="10,4" ToolTip.Tip="Mostrar u ocultar ayuda" />
         </StackPanel>
       </Grid>
     </Border>
 
-    <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource ActivityBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
-      <StackPanel Margin="0,12" Spacing="18" HorizontalAlignment="Center">
-        <TextBlock Text="PC" Foreground="{StaticResource AccentBlue}" FontWeight="Bold" FontSize="15" />
-        <TextBlock Text="EX" Foreground="{StaticResource TextSecondary}" FontSize="13" />
-        <TextBlock Text="RUN" Foreground="{StaticResource TextSecondary}" FontSize="12" />
-        <TextBlock Text="?" Foreground="{StaticResource TextSecondary}" FontSize="18" />
-      </StackPanel>
-    </Border>
-
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
+    <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,Auto,*">
         <TextBlock Classes="panel-title" Text="EXPLORADOR" />
         <StackPanel Grid.Row="1" Margin="14,0,14,12" Spacing="8">
@@ -110,22 +100,29 @@
         </StackPanel>
 
         <Border Grid.Row="2" Margin="14,0,14,12" Background="{StaticResource InsetBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="1" CornerRadius="4">
-          <StackPanel Margin="12" Spacing="8">
-            <TextBlock Text="pseudo-main.psc" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
-            <TextBlock x:Name="CurrentPathText" Text="Sin guardar" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
-          </StackPanel>
+          <ScrollViewer>
+            <StackPanel x:Name="OpenFilesPanel" Margin="8" Spacing="6" />
+          </ScrollViewer>
         </Border>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="42,*,210">
-      <Border Grid.Row="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,12,0">
-          <Border Background="{StaticResource TabBackground}" BorderBrush="{StaticResource AccentBlue}" BorderThickness="0,2,0,0" Padding="16,0">
-            <TextBlock Text="pseudo-main.psc" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
-          </Border>
+    <GridSplitter Grid.Row="1"
+                  Grid.Column="1"
+                  Background="{StaticResource BorderBrushMuted}"
+                  ResizeDirection="Columns"
+                  ResizeBehavior="PreviousAndNext"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch" />
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+    <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="42,*,6,210">
+      <Border Grid.Row="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,12,0">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="EditorTabsPanel" Orientation="Horizontal" />
+          </ScrollViewer>
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
             <Button Classes="command" Click="Run_Click" Content="Ejecutar" />
             <Button Classes="command" Click="SaveFile_Click" Content="Guardar" />
           </StackPanel>
@@ -146,16 +143,44 @@
                        HorizontalScrollBarVisibility="Auto"
                        VerticalScrollBarVisibility="Auto" />
 
-      <Grid Grid.Row="2" RowDefinitions="34,*" Background="{StaticResource EditorBackground}">
+      <GridSplitter Grid.Row="2"
+                    Background="{StaticResource BorderBrushMuted}"
+                    ResizeDirection="Rows"
+                    ResizeBehavior="PreviousAndNext"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" />
+
+      <Grid Grid.Row="3" RowDefinitions="34,*" Background="{StaticResource EditorBackground}">
         <Border BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,1,0,1" Background="{StaticResource PanelBackground}">
-          <StackPanel Orientation="Horizontal" Spacing="18" Margin="14,0" VerticalAlignment="Center">
-            <TextBlock Text="SALIDA" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
-            <TextBlock Text="DIAGNOSTICOS" Foreground="{StaticResource TextSecondary}" />
-            <TextBlock Text="VARIABLES" Foreground="{StaticResource TextSecondary}" />
-          </StackPanel>
+          <Grid ColumnDefinitions="2*,6,*">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="14,0" VerticalAlignment="Center">
+              <Button x:Name="OutputTabButton"
+                      Content="SALIDA"
+                      Click="OutputView_Click"
+                      Background="Transparent"
+                      BorderThickness="0"
+                      Foreground="{StaticResource TextPrimary}"
+                      FontWeight="SemiBold"
+                      Padding="0" />
+              <Button x:Name="DiagnosticsTabButton"
+                      Content="DIAGNOSTICOS"
+                      Click="DiagnosticsView_Click"
+                      Background="Transparent"
+                      BorderThickness="0"
+                      Foreground="{StaticResource TextSecondary}"
+                      Padding="0" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="2"
+                       Text="VARIABLES"
+                       Foreground="{StaticResource TextSecondary}"
+                       FontWeight="SemiBold"
+                       Margin="14,0"
+                       VerticalAlignment="Center" />
+          </Grid>
         </Border>
 
-        <Grid Grid.Row="1" ColumnDefinitions="2*,*" Background="{StaticResource OutputBackground}">
+        <Grid Grid.Row="1" ColumnDefinitions="2*,6,*" Background="{StaticResource OutputBackground}">
           <Grid RowDefinitions="*,Auto">
             <TextBox x:Name="OutputTextBox"
                      IsReadOnly="True"
@@ -196,7 +221,14 @@
               </Grid>
             </Border>
           </Grid>
-          <TextBox Grid.Column="1"
+          <GridSplitter Grid.Column="1"
+                        Background="{StaticResource BorderBrushMuted}"
+                        ResizeDirection="Columns"
+                        ResizeBehavior="PreviousAndNext"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch" />
+
+          <TextBox Grid.Column="2"
                    x:Name="VariablesTextBox"
                    IsReadOnly="True"
                    IsTabStop="False"
@@ -226,7 +258,7 @@
             Background="{StaticResource PanelBackground}"
             BorderBrush="{StaticResource BorderBrushMuted}"
             BorderThickness="1,0,0,0">
-      <Grid RowDefinitions="Auto,Auto,*">
+      <Grid RowDefinitions="Auto,250,6,*">
         <Grid ColumnDefinitions="*,Auto" Margin="14,12,14,8">
           <TextBlock Text="AYUDA POR TEMAS"
                      Foreground="{StaticResource TextSecondary}"
@@ -236,7 +268,7 @@
           <Button Grid.Column="1" Classes="command" Click="ToggleHelp_Click" Content="Ocultar" Padding="8,4" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" Margin="14,0,14,10" MaxHeight="250">
+        <ScrollViewer Grid.Row="1" Margin="14,0,14,10">
           <StackPanel Spacing="12">
             <TextBlock Text="PLANTILLAS"
                        Foreground="{StaticResource TextSecondary}"
@@ -266,7 +298,14 @@
           </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer Grid.Row="2" Margin="14,0,14,14">
+        <GridSplitter Grid.Row="2"
+                      Background="{StaticResource BorderBrushMuted}"
+                      ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch" />
+
+        <ScrollViewer Grid.Row="3" Margin="14,10,14,14">
           <StackPanel x:Name="HelpTopicsPanel" Spacing="10" />
         </ScrollViewer>
       </Grid>
@@ -275,6 +314,13 @@
     <Border Grid.Row="2" Grid.ColumnSpan="5" Background="{StaticResource AccentBlue}">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
         <TextBlock Text=".NET 8 + Avalonia" Foreground="White" VerticalAlignment="Center" FontSize="12" />
+        <TextBlock Grid.Column="1"
+                   x:Name="WindowStateText"
+                   Text="Listo"
+                   Foreground="White"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Center"
+                   FontSize="12" />
         <TextBlock Grid.Column="2" x:Name="CursorStatusText" Text="Linea 1, Columna 1" Foreground="White" VerticalAlignment="Center" FontSize="12" />
       </Grid>
     </Border>

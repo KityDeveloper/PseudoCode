@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -24,21 +25,22 @@ public partial class MainWindow : Window
     private const double MaxEditorFontSize = 30;
     private const double EditorZoomStep = 1;
 
-    private readonly PseudoInterpreter _interpreter = new();
-    private IStorageFile? _currentFile;
-    private bool _hasUnsavedChanges;
+    private readonly List<OpenDocument> _openDocuments = [];
+    private OpenDocument? _currentDocument;
+    private int _newAlgorithmNumber = 1;
+    private bool _isSwitchingDocument;
+    private bool _showDiagnostics;
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
-    private ExecutionResult? _lastExecutionResult;
+    private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
 
     public MainWindow()
     {
         InitializeComponent();
         ConfigureEditor();
-        EditorTextBox.Text = SampleProgram;
-        _hasUnsavedChanges = false;
+        AddNewDocument();
         BuildEditorTools();
         BuildHelpTopics();
         DragDrop.SetAllowDrop(this, true);
@@ -55,7 +57,7 @@ public partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Abrir algoritmo",
-            AllowMultiple = false,
+            AllowMultiple = true,
             FileTypeFilter =
             [
                 new FilePickerFileType("Pseudocodigo")
@@ -66,13 +68,10 @@ public partial class MainWindow : Window
             ]
         });
 
-        var file = files.FirstOrDefault();
-        if (file is null)
+        foreach (var file in files)
         {
-            return;
+            await LoadFileAsync(file);
         }
-
-        await LoadFileAsync(file);
     }
 
     private async void SaveFile_Click(object? sender, RoutedEventArgs e)
@@ -80,29 +79,49 @@ public partial class MainWindow : Window
         await SaveCurrentFileAsync();
     }
 
+    private async void CloseFile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_currentDocument is not null)
+        {
+            await CloseDocumentAsync(_currentDocument);
+        }
+    }
+
     private void NewFile_Click(object? sender, RoutedEventArgs e)
     {
-        EditorTextBox.Text = SampleProgram;
-        OutputTextBox.Text = string.Empty;
-        VariablesTextBox.Text = string.Empty;
-        HideConsoleInput();
-        _lastExecutionResult = null;
-        _currentFile = null;
-        _hasUnsavedChanges = false;
-        CurrentPathText.Text = "Sin guardar";
-        UpdateWindowState("Nuevo algoritmo");
+        AddNewDocument();
     }
 
     private void Run_Click(object? sender, RoutedEventArgs e)
     {
+        var document = _currentDocument;
+        if (document is null)
+        {
+            return;
+        }
+
         HideConsoleInput();
-        _lastExecutionResult = _interpreter.Start(EditorTextBox.Text ?? string.Empty);
-        ShowExecutionResult(_lastExecutionResult);
+        document.Text = EditorTextBox.Text ?? string.Empty;
+        var result = document.Interpreter.Start(document.Text);
+        document.LastExecutionResult = result;
+        ShowExecutionResult(result);
     }
 
     private void SendConsoleInput_Click(object? sender, RoutedEventArgs e)
     {
         SendConsoleInput();
+    }
+
+    private void OutputView_Click(object? sender, RoutedEventArgs e)
+    {
+        _showDiagnostics = false;
+        UpdateOutputPanelView();
+    }
+
+    private void DiagnosticsView_Click(object? sender, RoutedEventArgs e)
+    {
+        _showDiagnostics = true;
+        UpdateOutputPanelView();
     }
 
     private void ConsoleInput_KeyDown(object? sender, KeyEventArgs e)
@@ -126,7 +145,13 @@ public partial class MainWindow : Window
         OutputTextBox.Text = string.Empty;
         VariablesTextBox.Text = string.Empty;
         HideConsoleInput();
-        _lastExecutionResult = null;
+        if (_currentDocument is not null)
+        {
+            _currentDocument.OutputText = string.Empty;
+            _currentDocument.DiagnosticsText = string.Empty;
+            _currentDocument.VariablesText = string.Empty;
+            _currentDocument.LastExecutionResult = null;
+        }
         UpdateWindowState("Salida limpia");
     }
 
@@ -189,9 +214,9 @@ public partial class MainWindow : Window
                     FontSize = 15,
                     HorizontalAlignment = HorizontalAlignment.Center
                 },
-                BuildAboutLine("YouTube", "@KityDev - https://www.youtube.com/@KityDev"),
-                BuildAboutLine("GitHub", "https://github.com/KityDeveloper"),
-                BuildAboutLine("Web", "kity.dev"),
+                BuildAboutLink("YouTube", "@KityDev - https://www.youtube.com/@KityDev", "https://www.youtube.com/@KityDev"),
+                BuildAboutLink("GitHub", "https://github.com/KityDeveloper", "https://github.com/KityDeveloper"),
+                BuildAboutLink("Web", "kity.dev", "https://kity.dev"),
                 new Button
                 {
                     Content = "Cerrar",
@@ -221,21 +246,43 @@ public partial class MainWindow : Window
 
     private void Editor_TextChanged(object? sender, EventArgs e)
     {
-        _hasUnsavedChanges = true;
+        if (_isSwitchingDocument || _currentDocument is null)
+        {
+            return;
+        }
+
+        _currentDocument.Text = EditorTextBox.Text ?? string.Empty;
+        _currentDocument.HasUnsavedChanges = true;
+        _currentDocument.DiagnosticLines.Clear();
+        UpdateDiagnosticUnderlines();
         UpdateLineNumbers();
         UpdateVariablesList();
+        RenderOpenDocuments();
         UpdateWindowState("Editando");
     }
 
     private async Task SaveCurrentFileAsync()
     {
-        var file = _currentFile;
+        var document = _currentDocument;
+        if (document is null)
+        {
+            return;
+        }
+
+        await SaveDocumentAsync(document);
+    }
+
+    private async Task<bool> SaveDocumentAsync(OpenDocument document)
+    {
+        SaveCurrentDocumentState();
+
+        var file = document.File;
         if (file is null)
         {
             file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Guardar algoritmo",
-                SuggestedFileName = "pseudo-main.psc",
+                SuggestedFileName = document.DisplayName,
                 FileTypeChoices =
                 [
                     new FilePickerFileType("Pseudocodigo")
@@ -250,40 +297,177 @@ public partial class MainWindow : Window
 
             if (file is null)
             {
-                return;
+                return false;
             }
 
-            _currentFile = file;
-            CurrentPathText.Text = file.Path.LocalPath;
+            document.File = file;
+            document.DisplayName = file.Name;
+            document.Location = file.Path.LocalPath;
         }
 
         await using var stream = await file.OpenWriteAsync();
         stream.SetLength(0);
         await using var writer = new StreamWriter(stream, Encoding.UTF8);
-        await writer.WriteAsync(EditorTextBox.Text ?? string.Empty);
-        _hasUnsavedChanges = false;
+        await writer.WriteAsync(document.Text);
+        document.HasUnsavedChanges = false;
+        RenderOpenDocuments();
         UpdateWindowState($"Guardado: {file.Name}");
+        return true;
+    }
+
+    private async Task CloseDocumentAsync(OpenDocument document)
+    {
+        if (document == _currentDocument)
+        {
+            SaveCurrentDocumentState();
+        }
+
+        if (document.HasUnsavedChanges)
+        {
+            var choice = await AskCloseUnsavedDocumentAsync(document);
+            if (choice == CloseDocumentChoice.Cancel)
+            {
+                UpdateWindowState($"Cierre cancelado: {document.DisplayName}");
+                return;
+            }
+
+            if (choice == CloseDocumentChoice.Save && !await SaveDocumentAsync(document))
+            {
+                UpdateWindowState($"Cierre cancelado: {document.DisplayName}");
+                return;
+            }
+        }
+
+        var closingIndex = _openDocuments.IndexOf(document);
+        var wasCurrent = document == _currentDocument;
+        _openDocuments.Remove(document);
+
+        if (_openDocuments.Count == 0)
+        {
+            _currentDocument = null;
+            AddNewDocument();
+            UpdateWindowState($"Cerrado: {document.DisplayName}");
+            return;
+        }
+
+        if (wasCurrent)
+        {
+            var nextIndex = Math.Clamp(closingIndex, 0, _openDocuments.Count - 1);
+            _currentDocument = null;
+            SwitchDocument(_openDocuments[nextIndex]);
+        }
+        else
+        {
+            RenderOpenDocuments();
+        }
+
+        UpdateWindowState($"Cerrado: {document.DisplayName}");
+    }
+
+    private async Task<CloseDocumentChoice> AskCloseUnsavedDocumentAsync(OpenDocument document)
+    {
+        var window = new Window
+        {
+            Title = "Guardar cambios",
+            Width = 420,
+            Height = 220,
+            MinWidth = 380,
+            MinHeight = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush("PanelBackground")
+        };
+
+        var saveButton = new Button
+        {
+            Content = "Guardar",
+            Classes = { "command" },
+            MinWidth = 96
+        };
+        var discardButton = new Button
+        {
+            Content = "No guardar",
+            Classes = { "command" },
+            MinWidth = 96
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancelar",
+            Classes = { "command" },
+            MinWidth = 96,
+            IsCancel = true
+        };
+
+        saveButton.Click += (_, _) => window.Close(CloseDocumentChoice.Save);
+        discardButton.Click += (_, _) => window.Close(CloseDocumentChoice.Discard);
+        cancelButton.Click += (_, _) => window.Close(CloseDocumentChoice.Cancel);
+
+        window.Content = new StackPanel
+        {
+            Margin = new Thickness(24),
+            Spacing = 18,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"Quieres guardar los cambios en {document.DisplayName} antes de cerrarlo?",
+                    Foreground = Brush("TextPrimary"),
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 15
+                },
+                new TextBlock
+                {
+                    Text = "Si no guardas, los cambios se perderan.",
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 10,
+                    Children =
+                    {
+                        saveButton,
+                        discardButton,
+                        cancelButton
+                    }
+                }
+            }
+        };
+
+        return await window.ShowDialog<CloseDocumentChoice>(this);
     }
 
     private async Task LoadFileAsync(IStorageFile file)
     {
         await using var stream = await file.OpenReadAsync();
         using var reader = new StreamReader(stream, Encoding.UTF8);
-        EditorTextBox.Text = await reader.ReadToEndAsync();
-        _currentFile = file;
-        _hasUnsavedChanges = false;
-        CurrentPathText.Text = file.Path.LocalPath;
-        OutputTextBox.Text = string.Empty;
-        VariablesTextBox.Text = string.Empty;
-        HideConsoleInput();
-        _lastExecutionResult = null;
-        UpdateLineNumbers();
+        var text = await reader.ReadToEndAsync();
+        var existingDocument = _openDocuments.FirstOrDefault(document => document.File?.Path == file.Path);
+        if (existingDocument is not null)
+        {
+            existingDocument.Text = text;
+            existingDocument.HasUnsavedChanges = false;
+            SwitchDocument(existingDocument);
+            UpdateWindowState($"Abierto: {file.Name}");
+            return;
+        }
+
+        var document = new OpenDocument(file.Name, text)
+        {
+            File = file,
+            Location = file.Path.LocalPath
+        };
+
+        _openDocuments.Add(document);
+        SwitchDocument(document);
         UpdateWindowState($"Abierto: {file.Name}");
     }
 
     private void SendConsoleInput()
     {
-        if (_lastExecutionResult?.WaitingForInput != true)
+        var document = _currentDocument;
+        if (document?.LastExecutionResult?.WaitingForInput != true)
         {
             HideConsoleInput();
             return;
@@ -291,14 +475,28 @@ public partial class MainWindow : Window
 
         var input = ConsoleInputTextBox.Text ?? string.Empty;
         ConsoleInputTextBox.Text = string.Empty;
-        _lastExecutionResult = _interpreter.Continue(input);
-        ShowExecutionResult(_lastExecutionResult);
+        document.LastExecutionResult = document.Interpreter.Continue(input);
+        ShowExecutionResult(document.LastExecutionResult);
     }
 
     private void ShowExecutionResult(ExecutionResult result)
     {
-        OutputTextBox.Text = BuildOutputText(result);
-        VariablesTextBox.Text = BuildVariablesText(result);
+        var outputText = BuildOutputText(result);
+        var diagnosticsText = BuildDiagnosticsText(result);
+        var variablesText = BuildVariablesText(result);
+        VariablesTextBox.Text = variablesText;
+
+        if (_currentDocument is not null)
+        {
+            _currentDocument.OutputText = outputText;
+            _currentDocument.DiagnosticsText = diagnosticsText;
+            _currentDocument.VariablesText = variablesText;
+            _currentDocument.LastExecutionResult = result;
+            _currentDocument.DiagnosticLines = ExtractDiagnosticLineNumbers(result.Diagnostics).ToHashSet();
+        }
+
+        UpdateDiagnosticUnderlines();
+        UpdateOutputPanelView();
 
         if (result.WaitingForInput)
         {
@@ -331,6 +529,8 @@ public partial class MainWindow : Window
         EditorTextBox.Options.IndentationSize = 4;
         _colorizer = new PseudoCodeColorizer(PseudoCodeColorizer.DarkPalette);
         EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
+        _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer();
+        EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
         ApplyEditorTheme(DarkTheme, PseudoCodeColorizer.DarkPalette);
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
@@ -561,8 +761,179 @@ public partial class MainWindow : Window
 
     private void UpdateWindowState(string message)
     {
-        WindowStateText.Text = _hasUnsavedChanges ? $"{message} - sin guardar" : message;
-        Title = _hasUnsavedChanges ? "PseudoCode *" : "PseudoCode";
+        var hasUnsavedChanges = _currentDocument?.HasUnsavedChanges == true;
+        WindowStateText.Text = hasUnsavedChanges ? $"{message} - sin guardar" : message;
+        Title = hasUnsavedChanges ? "PseudoCode *" : "PseudoCode";
+    }
+
+    private void AddNewDocument()
+    {
+        var document = new OpenDocument($"Nuevo {_newAlgorithmNumber++}.psc", SampleProgram);
+        _openDocuments.Add(document);
+        SwitchDocument(document);
+        UpdateWindowState($"Nuevo algoritmo: {document.DisplayName}");
+    }
+
+    private void SwitchDocument(OpenDocument document)
+    {
+        if (_currentDocument == document)
+        {
+            return;
+        }
+
+        SaveCurrentDocumentState();
+        _currentDocument = document;
+        _isSwitchingDocument = true;
+        try
+        {
+            EditorTextBox.Text = document.Text;
+            VariablesTextBox.Text = document.VariablesText;
+            if (document.LastExecutionResult?.WaitingForInput == true)
+            {
+                ShowConsoleInput(document.LastExecutionResult.InputVariable ?? "valor");
+            }
+            else
+            {
+                HideConsoleInput();
+            }
+        }
+        finally
+        {
+            _isSwitchingDocument = false;
+        }
+
+        UpdateLineNumbers();
+        UpdateVariablesList();
+        UpdateDiagnosticUnderlines();
+        UpdateOutputPanelView();
+        RenderOpenDocuments();
+        UpdateWindowState($"Activo: {document.DisplayName}");
+        EditorTextBox.Focus();
+    }
+
+    private void SaveCurrentDocumentState()
+    {
+        if (_currentDocument is null)
+        {
+            return;
+        }
+
+        _currentDocument.Text = EditorTextBox.Text ?? string.Empty;
+        _currentDocument.VariablesText = VariablesTextBox.Text ?? string.Empty;
+    }
+
+    private void UpdateOutputPanelView()
+    {
+        var document = _currentDocument;
+        OutputTextBox.Text = document is null
+            ? string.Empty
+            : _showDiagnostics
+                ? document.DiagnosticsText
+                : document.OutputText;
+
+        OutputTabButton.Foreground = _showDiagnostics ? Brush("TextSecondary") : Brush("TextPrimary");
+        OutputTabButton.FontWeight = _showDiagnostics ? FontWeight.Normal : FontWeight.SemiBold;
+        DiagnosticsTabButton.Foreground = _showDiagnostics ? Brush("TextPrimary") : Brush("TextSecondary");
+        DiagnosticsTabButton.FontWeight = _showDiagnostics ? FontWeight.SemiBold : FontWeight.Normal;
+    }
+
+    private void UpdateDiagnosticUnderlines()
+    {
+        if (_diagnosticUnderlineRenderer is null)
+        {
+            return;
+        }
+
+        _diagnosticUnderlineRenderer.SetLines(_currentDocument?.DiagnosticLines ?? []);
+        EditorTextBox.TextArea.TextView.Redraw();
+    }
+
+    private void RenderOpenDocuments()
+    {
+        OpenFilesPanel.Children.Clear();
+        EditorTabsPanel.Children.Clear();
+
+        foreach (var document in _openDocuments)
+        {
+            OpenFilesPanel.Children.Add(BuildDocumentButton(document, false));
+            EditorTabsPanel.Children.Add(BuildDocumentButton(document, true));
+        }
+    }
+
+    private Control BuildDocumentButton(OpenDocument document, bool isTab)
+    {
+        var isSelected = document == _currentDocument;
+        var displayName = document.HasUnsavedChanges ? $"{document.DisplayName} *" : document.DisplayName;
+        var container = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto)
+            },
+            Background = isSelected ? Brush("AccentBlue") : Brush(isTab ? "TabBackground" : "ButtonBackground"),
+            MinWidth = isTab ? 140 : 0,
+            HorizontalAlignment = isTab ? HorizontalAlignment.Left : HorizontalAlignment.Stretch
+        };
+
+        var openButton = new Button
+        {
+            Content = displayName,
+            Background = Brushes.Transparent,
+            Foreground = isSelected ? Brushes.White : Brush("TextPrimary"),
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(0),
+            Padding = isTab ? new Thickness(14, 8, 8, 8) : new Thickness(8, 7),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left
+        };
+        ToolTip.SetTip(openButton, document.Location);
+        openButton.Click += (_, _) => SwitchDocument(document);
+        container.Children.Add(openButton);
+
+        var closeButton = new Button
+        {
+            Content = "x",
+            Background = Brushes.Transparent,
+            Foreground = isSelected ? Brushes.White : Brush("TextSecondary"),
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(0),
+            Padding = isTab ? new Thickness(8, 6) : new Thickness(8, 4),
+            MinWidth = 28,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+        ToolTip.SetTip(closeButton, $"Cerrar {document.DisplayName}");
+        closeButton.Click += async (_, e) =>
+        {
+            e.Handled = true;
+            await CloseDocumentAsync(document);
+        };
+        Grid.SetColumn(closeButton, 1);
+        container.Children.Add(closeButton);
+
+        if (isTab)
+        {
+            container.Children.Add(new Border
+            {
+                BorderBrush = isSelected ? Brush("AccentBlue") : Brush("BorderBrushMuted"),
+                BorderThickness = new Thickness(0, isSelected ? 2 : 0, 1, 0),
+                IsHitTestVisible = false
+            });
+        }
+        else
+        {
+            container.Children.Add(new Border
+            {
+                BorderBrush = isSelected ? Brush("AccentBlue") : Brush("BorderBrushMuted"),
+                BorderThickness = new Thickness(1),
+                IsHitTestVisible = false
+            });
+        }
+
+        return container;
     }
 
     private void BuildHelpTopics()
@@ -702,20 +1073,27 @@ public partial class MainWindow : Window
 
     private void LoadHelpExample(HelpTopic topic)
     {
-        EditorTextBox.Text = topic.Example;
-        OutputTextBox.Text = string.Empty;
-        VariablesTextBox.Text = string.Empty;
-        HideConsoleInput();
-        _lastExecutionResult = null;
-        _currentFile = null;
-        _hasUnsavedChanges = true;
-        CurrentPathText.Text = "Ejemplo de ayuda";
-        UpdateLineNumbers();
+        SaveCurrentDocumentState();
+        var document = new OpenDocument($"{topic.Title}.psc", topic.Example)
+        {
+            HasUnsavedChanges = true,
+            Location = "Ejemplo de ayuda"
+        };
+
+        _openDocuments.Add(document);
+        SwitchDocument(document);
         UpdateWindowState($"Ejemplo cargado: {topic.Title}");
     }
 
     private void ApplyTheme(IReadOnlyDictionary<string, string> colors)
     {
+        var themeVariant = _isLightTheme ? ThemeVariant.Light : ThemeVariant.Dark;
+        RequestedThemeVariant = themeVariant;
+        if (Application.Current is not null)
+        {
+            Application.Current.RequestedThemeVariant = themeVariant;
+        }
+
         foreach (var (key, value) in colors)
         {
             if (Resources[key] is SolidColorBrush brush)
@@ -725,6 +1103,8 @@ public partial class MainWindow : Window
         }
 
         ApplyEditorTheme(colors, _isLightTheme ? PseudoCodeColorizer.LightPalette : PseudoCodeColorizer.DarkPalette);
+        RenderOpenDocuments();
+        UpdateOutputPanelView();
     }
 
     private void ApplyEditorTheme(IReadOnlyDictionary<string, string> colors, PseudoCodeColorPalette syntaxPalette)
@@ -746,13 +1126,39 @@ public partial class MainWindow : Window
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
 
-    private TextBlock BuildAboutLine(string label, string value) =>
-        new()
+    private Grid BuildAboutLink(string label, string text, string uri)
+    {
+        var row = new Grid
         {
-            Text = $"{label}: {value}",
-            Foreground = Brush("TextPrimary"),
-            TextWrapping = TextWrapping.Wrap
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star)
+            },
+            ColumnSpacing = 6
         };
+
+        row.Children.Add(new TextBlock
+        {
+            Text = $"{label}:",
+            Foreground = Brush("TextPrimary"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        var link = new HyperlinkButton
+        {
+            Content = text,
+            NavigateUri = new Uri(uri),
+            Foreground = Brush("AccentBlue"),
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(link, 1);
+        row.Children.Add(link);
+
+        return row;
+    }
 
     private static bool StartsLogicalBlock(string text) =>
         StartsWithAny(text, "Algoritmo ", "Proceso ", "Si ", "Mientras ", "Para ", "Segun ");
@@ -776,17 +1182,35 @@ public partial class MainWindow : Window
             }
         }
 
-        if (result.Diagnostics.Count > 0)
+        return builder.ToString();
+    }
+
+    private static string BuildDiagnosticsText(ExecutionResult result)
+    {
+        if (result.Diagnostics.Count == 0)
         {
-            builder.AppendLine();
-            builder.AppendLine("Diagnosticos:");
-            foreach (var diagnostic in result.Diagnostics)
-            {
-                builder.AppendLine(diagnostic);
-            }
+            return "Sin diagnosticos.";
+        }
+
+        var builder = new StringBuilder();
+        foreach (var diagnostic in result.Diagnostics)
+        {
+            builder.AppendLine(diagnostic);
         }
 
         return builder.ToString();
+    }
+
+    private static IEnumerable<int> ExtractDiagnosticLineNumbers(IEnumerable<string> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            var match = Regex.Match(diagnostic, @"^Linea\s+(\d+):", RegexOptions.IgnoreCase);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var lineNumber))
+            {
+                yield return lineNumber;
+            }
+        }
     }
 
     private static string BuildVariablesText(ExecutionResult result)
@@ -806,6 +1230,28 @@ public partial class MainWindow : Window
     }
 
     private sealed record HelpTopic(string Title, string Description, string Example, bool IsExpanded = false);
+
+    private enum CloseDocumentChoice
+    {
+        Cancel,
+        Save,
+        Discard
+    }
+
+    private sealed class OpenDocument(string displayName, string text)
+    {
+        public IStorageFile? File { get; set; }
+        public string DisplayName { get; set; } = displayName;
+        public string Location { get; set; } = "Sin guardar";
+        public string Text { get; set; } = text;
+        public string OutputText { get; set; } = string.Empty;
+        public string DiagnosticsText { get; set; } = "Sin diagnosticos.";
+        public string VariablesText { get; set; } = string.Empty;
+        public HashSet<int> DiagnosticLines { get; set; } = [];
+        public bool HasUnsavedChanges { get; set; }
+        public ExecutionResult? LastExecutionResult { get; set; }
+        public PseudoInterpreter Interpreter { get; } = new();
+    }
 
     private static readonly CommandInfo[] CompletionItems =
     [
@@ -972,6 +1418,50 @@ internal sealed record PseudoCodeColorPalette(
     IBrush OperatorBrush,
     IBrush CommentBrush,
     IBrush BlockBrush);
+
+internal sealed class DiagnosticUnderlineRenderer : IBackgroundRenderer
+{
+    private readonly Pen _pen = new(Brushes.Red, 1.5);
+    private HashSet<int> _lineNumbers = [];
+
+    public KnownLayer Layer => KnownLayer.Text;
+
+    public void SetLines(IEnumerable<int> lineNumbers)
+    {
+        _lineNumbers = lineNumbers.Where(lineNumber => lineNumber > 0).ToHashSet();
+    }
+
+    public void Draw(TextView textView, DrawingContext drawingContext)
+    {
+        if (_lineNumbers.Count == 0 || textView.Document is null)
+        {
+            return;
+        }
+
+        textView.EnsureVisualLines();
+        foreach (var lineNumber in _lineNumbers)
+        {
+            if (lineNumber > textView.Document.LineCount)
+            {
+                continue;
+            }
+
+            var line = textView.Document.GetLineByNumber(lineNumber);
+            var length = Math.Max(1, line.Length);
+            var segment = new TextSegment
+            {
+                StartOffset = line.Offset,
+                Length = length
+            };
+
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment, false))
+            {
+                var y = Math.Max(rect.Top, rect.Bottom - 2);
+                drawingContext.DrawLine(_pen, new Point(rect.Left, y), new Point(rect.Right, y));
+            }
+        }
+    }
+}
 
 internal sealed class PseudoCodeColorizer(PseudoCodeColorPalette palette) : DocumentColorizingTransformer
 {
