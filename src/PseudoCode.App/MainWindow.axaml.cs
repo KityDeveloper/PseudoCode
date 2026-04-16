@@ -106,6 +106,15 @@ public partial class MainWindow : Window
 
         HideConsoleInput();
         document.Text = EditorTextBox.Text ?? string.Empty;
+        if (UpdateLiveSyntaxDiagnostics(document))
+        {
+            _showDiagnostics = true;
+            UpdateDiagnosticUnderlines();
+            UpdateOutputPanelView();
+            UpdateWindowState("Corrige los errores de sintaxis");
+            return;
+        }
+
         var result = document.Interpreter.Start(document.Text);
         document.LastExecutionResult = result;
         ShowExecutionResult(result);
@@ -314,6 +323,7 @@ public partial class MainWindow : Window
         _currentDocument.Text = EditorTextBox.Text ?? string.Empty;
         _currentDocument.HasUnsavedChanges = true;
         _currentDocument.DiagnosticLines.Clear();
+        UpdateLiveSyntaxDiagnostics(_currentDocument);
         UpdateDiagnosticUnderlines();
         UpdateLineNumbers();
         UpdateVariablesList();
@@ -947,6 +957,14 @@ public partial class MainWindow : Window
         DiagnosticsTabButton.FontWeight = _showDiagnostics ? FontWeight.SemiBold : FontWeight.Normal;
     }
 
+    private bool UpdateLiveSyntaxDiagnostics(OpenDocument document)
+    {
+        var diagnostics = PseudoSyntaxValidator.Validate(document.Text);
+        document.DiagnosticsText = diagnostics.Count == 0 ? "Sin diagnosticos." : string.Join(Environment.NewLine, diagnostics);
+        document.DiagnosticLines = ExtractDiagnosticLineNumbers(diagnostics).ToHashSet();
+        return diagnostics.Count > 0;
+    }
+
     private void UpdateDiagnosticUnderlines()
     {
         if (_diagnosticUnderlineRenderer is null)
@@ -1517,6 +1535,244 @@ FinAlgoritmo
 }
 
 internal sealed record CommandInfo(string Text, string InsertText, string Description, bool IsTemplate = false);
+
+internal static class PseudoSyntaxValidator
+{
+    private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+    private static readonly HashSet<string> Types = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"
+    };
+
+    public static IReadOnlyList<string> Validate(string source)
+    {
+        var diagnostics = new List<string>();
+        var blocks = new Stack<(string Name, int Line)>();
+        var lines = source.Replace("\r\n", "\n").Split('\n');
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var lineNumber = index + 1;
+            var line = RemoveComment(lines[index]).Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            ValidateLine(line, lineNumber, diagnostics, blocks);
+        }
+
+        while (blocks.TryPop(out var block))
+        {
+            diagnostics.Add($"Linea {block.Line}: falta cerrar '{block.Name}'. Causa: el bloque quedo abierto. Solucion: agrega su cierre correspondiente.");
+        }
+
+        return diagnostics;
+    }
+
+    private static void ValidateLine(string line, int lineNumber, List<string> diagnostics, Stack<(string Name, int Line)> blocks)
+    {
+        if (line.Count(character => character == '"') % 2 != 0)
+        {
+            diagnostics.Add($"Linea {lineNumber}: comillas sin cerrar. Causa: falta una comilla doble. Solucion: cierra el texto con \".");
+            return;
+        }
+
+        if (StartsWithAny(line, "Algoritmo ", "Proceso "))
+        {
+            blocks.Push((line.StartsWith("Proceso ", StringComparison.OrdinalIgnoreCase) ? "Proceso" : "Algoritmo", lineNumber));
+            return;
+        }
+
+        if (line.Equals("FinAlgoritmo", StringComparison.OrdinalIgnoreCase) || line.Equals("FinProceso", StringComparison.OrdinalIgnoreCase))
+        {
+            CloseBlock(lineNumber, line.StartsWith("FinProceso", StringComparison.OrdinalIgnoreCase) ? "Proceso" : "Algoritmo", diagnostics, blocks);
+            return;
+        }
+
+        if (line.StartsWith("Definir ", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateDeclaration(line["Definir ".Length..], lineNumber, diagnostics);
+            return;
+        }
+
+        if (line.StartsWith("Escribir ", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateExpression(line["Escribir ".Length..], lineNumber, "Escribir", diagnostics);
+            return;
+        }
+
+        if (line.StartsWith("Leer ", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateIdentifierList(line["Leer ".Length..], lineNumber, "Leer", diagnostics);
+            return;
+        }
+
+        if (Regex.IsMatch(line, @"^Si\s+.+\s+Entonces$", RegexOptions.IgnoreCase))
+        {
+            blocks.Push(("Si", lineNumber));
+            return;
+        }
+
+        if (line.Equals("Sino", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!blocks.Any(block => block.Name.Equals("Si", StringComparison.OrdinalIgnoreCase)))
+            {
+                diagnostics.Add($"Linea {lineNumber}: 'Sino' no corresponde a ningun 'Si'. Causa: falta abrir un bloque Si. Solucion: usa 'Si condicion Entonces' antes de 'Sino'.");
+            }
+            return;
+        }
+
+        if (line.Equals("FinSi", StringComparison.OrdinalIgnoreCase))
+        {
+            CloseBlock(lineNumber, "Si", diagnostics, blocks);
+            return;
+        }
+
+        if (Regex.IsMatch(line, @"^Mientras\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
+        {
+            blocks.Push(("Mientras", lineNumber));
+            return;
+        }
+
+        if (line.Equals("FinMientras", StringComparison.OrdinalIgnoreCase))
+        {
+            CloseBlock(lineNumber, "Mientras", diagnostics, blocks);
+            return;
+        }
+
+        if (Regex.IsMatch(line, @"^Para\s+[A-Za-z_][A-Za-z0-9_]*\s*<-\s*.+\s+Hasta\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
+        {
+            blocks.Push(("Para", lineNumber));
+            return;
+        }
+
+        if (line.Equals("FinPara", StringComparison.OrdinalIgnoreCase))
+        {
+            CloseBlock(lineNumber, "Para", diagnostics, blocks);
+            return;
+        }
+
+        if (Regex.IsMatch(line, @"^Segun\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
+        {
+            blocks.Push(("Segun", lineNumber));
+            return;
+        }
+
+        if (line.Equals("FinSegun", StringComparison.OrdinalIgnoreCase))
+        {
+            CloseBlock(lineNumber, "Segun", diagnostics, blocks);
+            return;
+        }
+
+        if (Regex.IsMatch(line, @"^.+:\s*$"))
+        {
+            return;
+        }
+
+        var assignmentIndex = line.IndexOf("<-", StringComparison.Ordinal);
+        if (assignmentIndex > 0)
+        {
+            ValidateAssignment(line, assignmentIndex, lineNumber, diagnostics);
+            return;
+        }
+
+        diagnostics.Add($"Linea {lineNumber}: instruccion desconocida. Causa: '{line}' no coincide con el pseudocodigo soportado. Solucion: revisa la palabra clave o consulta la ayuda.");
+    }
+
+    private static void ValidateDeclaration(string declaration, int lineNumber, List<string> diagnostics)
+    {
+        var separator = declaration.IndexOf(" Como ", StringComparison.OrdinalIgnoreCase);
+        var names = separator >= 0 ? declaration[..separator] : declaration;
+        ValidateIdentifierList(names, lineNumber, "Definir", diagnostics);
+
+        if (separator >= 0)
+        {
+            var typeName = declaration[(separator + " Como ".Length)..].Trim();
+            if (typeName.Length == 0 || !Types.Contains(typeName))
+            {
+                diagnostics.Add($"Linea {lineNumber}: tipo '{typeName}' no reconocido. Causa: el tipo esta vacio o no existe. Solucion: usa Entero, Real, Cadena o Logico.");
+            }
+        }
+    }
+
+    private static void ValidateIdentifierList(string text, int lineNumber, string instruction, List<string> diagnostics)
+    {
+        var names = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (names.Length == 0)
+        {
+            diagnostics.Add($"Linea {lineNumber}: '{instruction}' necesita al menos una variable. Causa: la lista esta vacia. Solucion: agrega un nombre valido.");
+            return;
+        }
+
+        foreach (var name in names)
+        {
+            if (!Identifier.IsMatch(name))
+            {
+                diagnostics.Add($"Linea {lineNumber}: '{name}' no es un nombre de variable valido. Causa: usa caracteres no permitidos o inicia con numero. Solucion: usa letras, numeros y guion bajo, empezando con letra.");
+            }
+        }
+    }
+
+    private static void ValidateExpression(string text, int lineNumber, string instruction, List<string> diagnostics)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            diagnostics.Add($"Linea {lineNumber}: '{instruction}' necesita una expresion. Causa: no hay nada para procesar. Solucion: agrega texto, variable o expresion.");
+        }
+    }
+
+    private static void ValidateAssignment(string line, int assignmentIndex, int lineNumber, List<string> diagnostics)
+    {
+        var name = line[..assignmentIndex].Trim();
+        var expression = line[(assignmentIndex + 2)..].Trim();
+        if (!Identifier.IsMatch(name))
+        {
+            diagnostics.Add($"Linea {lineNumber}: '{name}' no es un destino de asignacion valido. Causa: el lado izquierdo debe ser una variable. Solucion: usa algo como 'total <- 10'.");
+        }
+
+        if (expression.Length == 0)
+        {
+            diagnostics.Add($"Linea {lineNumber}: asignacion incompleta. Causa: falta la expresion despues de '<-'. Solucion: agrega un valor o calculo.");
+        }
+    }
+
+    private static void CloseBlock(int lineNumber, string expected, List<string> diagnostics, Stack<(string Name, int Line)> blocks)
+    {
+        if (!blocks.TryPop(out var opened))
+        {
+            diagnostics.Add($"Linea {lineNumber}: cierre '{expected}' sin bloque abierto. Causa: sobra un cierre. Solucion: elimina este cierre o agrega el bloque inicial.");
+            return;
+        }
+
+        if (!opened.Name.Equals(expected, StringComparison.OrdinalIgnoreCase))
+        {
+            diagnostics.Add($"Linea {lineNumber}: cierre incorrecto. Causa: se esperaba cerrar '{opened.Name}', pero aparece '{expected}'. Solucion: cambia el cierre o revisa el orden de los bloques.");
+        }
+    }
+
+    private static bool StartsWithAny(string text, params string[] prefixes) =>
+        prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+    private static string RemoveComment(string line)
+    {
+        var inString = false;
+        for (var index = 0; index < line.Length - 1; index++)
+        {
+            if (line[index] == '"')
+            {
+                inString = !inString;
+            }
+
+            if (!inString && line[index] == '/' && line[index + 1] == '/')
+            {
+                return line[..index];
+            }
+        }
+
+        return line;
+    }
+}
 
 internal sealed class PseudoCompletionData(CommandInfo item) : ICompletionData
 {
