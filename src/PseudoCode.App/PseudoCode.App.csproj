@@ -27,6 +27,7 @@
     <AvaloniaResource Include="../../resources/images/iconKityDev.png" Link="Assets/iconKityDev.png" />
     <AvaloniaResource Include="../../resources/images/LogoKityDev.png" Link="Assets/LogoKityDev.png" />
     <AvaloniaResource Include="../../docs/ayuda.md" Link="Docs/ayuda.md" />
+    <AvaloniaResource Include="../../docs/pseudolenguaje.md" Link="Docs/pseudolenguaje.md" />
     <AvaloniaResource Include="../../docs/configuracion-json.md" Link="Docs/configuracion-json.md" />
     <AvaloniaResource Include="../../CHANGELOG.md" Link="Docs/CHANGELOG.md" />
     <Content Include="settings/**/*.json" CopyToOutputDirectory="PreserveNewest" />

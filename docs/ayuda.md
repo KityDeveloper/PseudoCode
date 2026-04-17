@@ -8,6 +8,7 @@ PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo 
 - [Flujo basico](#flujo-basico)
 - [Editor](#editor)
 - [Ejecucion](#ejecucion)
+- [Pseudolenguaje](#pseudolenguaje)
 - [Configuracion](#configuracion)
 - [Mas documentacion](#mas-documentacion)
 
@@ -44,6 +45,12 @@ El editor soporta tabs, multiples archivos, zoom del texto con `Ctrl` + scroll y
 
 La app puede ejecutar estructuras basicas de pseudocodigo: asignaciones, `Definir`, `Escribir`, `Leer`, `Si`, `Mientras`, `Para` y `Segun`.
 
+## Pseudolenguaje
+
+La guia completa del pseudolenguaje tiene ejemplos de codigo para estructura base, variables, entrada, salida, condiciones, ciclos, `Segun`, diagnosticos, depuracion e indentacion.
+
+Abre [Pseudolenguaje](pseudolenguaje.md) para ver todos los ejemplos.
+
 ## Depuracion paso a paso
 
 Usa **Ejecutar > Iniciar depuracion** para comenzar una sesion paso a paso. La app selecciona la linea actual en el editor y muestra salida, diagnosticos y variables mientras avanzas.
@@ -69,8 +76,8 @@ En los editores JSON usa **Guardar y aplicar** para cambiar el dialecto o tema a
 
 ## Mas documentacion
 
-- `docs/configuracion-json.md`
-- `docs/pseudolenguaje.md`
-- `docs/desarrollo.md`
-- `docs/publicacion.md`
-- `CHANGELOG.md`
+- [Configuracion JSON](configuracion-json.md)
+- [Pseudolenguaje](pseudolenguaje.md)
+- docs/desarrollo.md
+- docs/publicacion.md
+- CHANGELOG.md

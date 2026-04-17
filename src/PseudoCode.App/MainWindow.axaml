@@ -96,6 +96,7 @@
               <MenuItem Header="Cargar ejemplo inicial" Click="LoadFirstHelpExample_Click" />
               <Separator />
               <MenuItem Header="Documentación" Click="Documentation_Click" />
+              <MenuItem Header="Pseudolenguaje" Click="PseudoLanguageDocumentation_Click" />
               <MenuItem Header="Configuración JSON" Click="JsonConfiguration_Click" />
               <MenuItem Header="Notas de versión" Click="ReleaseNotes_Click" />
               <Separator />

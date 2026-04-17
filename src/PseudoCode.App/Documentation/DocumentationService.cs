@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform;
@@ -11,12 +12,14 @@ internal sealed record DocumentationPage(string Id, string Title, string Resourc
 internal static class DocumentationService
 {
     public static readonly DocumentationPage Help = new("ayuda", "Documentacion", "avares://PseudoCode.App/Docs/ayuda.md");
+    public static readonly DocumentationPage PseudoLanguage = new("pseudolenguaje", "Pseudolenguaje", "avares://PseudoCode.App/Docs/pseudolenguaje.md");
     public static readonly DocumentationPage JsonConfig = new("configuracion-json", "Configuracion JSON", "avares://PseudoCode.App/Docs/configuracion-json.md");
     public static readonly DocumentationPage ReleaseNotes = new("notas-version", "Notas de version", "avares://PseudoCode.App/Docs/CHANGELOG.md");
 
     public static readonly DocumentationPage[] Pages =
     [
         Help,
+        PseudoLanguage,
         JsonConfig,
         ReleaseNotes
     ];
@@ -42,7 +45,6 @@ internal static class DocumentationService
             Margin = new Thickness(24),
             Spacing = 8
         };
-        RenderMarkdown(markdownHost, LoadMarkdown(initialPage), colors);
 
         var title = new TextBlock
         {
@@ -52,6 +54,12 @@ internal static class DocumentationService
             Foreground = Brush(colors["TextPrimary"]),
             VerticalAlignment = VerticalAlignment.Center
         };
+
+        void NavigateTo(DocumentationPage page)
+        {
+            title.Text = page.Title;
+            RenderMarkdown(markdownHost, LoadMarkdown(page), colors, NavigateTo);
+        }
 
         var list = new StackPanel
         {
@@ -69,11 +77,12 @@ internal static class DocumentationService
             };
             button.Click += (_, _) =>
             {
-                title.Text = page.Title;
-                RenderMarkdown(markdownHost, LoadMarkdown(page), colors);
+                NavigateTo(page);
             };
             list.Children.Add(button);
         }
+
+        NavigateTo(initialPage);
 
         var header = new Border
         {
@@ -126,7 +135,7 @@ internal static class DocumentationService
 
     private static SolidColorBrush Brush(string color) => new(Color.Parse(color));
 
-    private static void RenderMarkdown(StackPanel host, string markdown, IReadOnlyDictionary<string, string> colors)
+    private static void RenderMarkdown(StackPanel host, string markdown, IReadOnlyDictionary<string, string> colors, Action<DocumentationPage> navigateTo)
     {
         host.Children.Clear();
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
@@ -182,17 +191,17 @@ internal static class DocumentationService
 
             if (line.StartsWith("- ", StringComparison.Ordinal))
             {
-                host.Children.Add(Text("• " + StripMarkdown(line[2..]), 14, FontWeight.Normal, colors["TextPrimary"]));
+                host.Children.Add(InlineText("• ", line[2..], 14, FontWeight.Normal, colors, navigateTo));
                 continue;
             }
 
             if (line.StartsWith("> ", StringComparison.Ordinal))
             {
-                host.Children.Add(Text(StripMarkdown(line[2..]), 14, FontWeight.Normal, colors["TextSecondary"]));
+                host.Children.Add(InlineText(string.Empty, line[2..], 14, FontWeight.Normal, colors, navigateTo, colors["TextSecondary"]));
                 continue;
             }
 
-            host.Children.Add(Text(StripMarkdown(line), 14, FontWeight.Normal, colors["TextPrimary"]));
+            host.Children.Add(InlineText(string.Empty, line, 14, FontWeight.Normal, colors, navigateTo));
         }
 
         if (code.Count > 0)
@@ -209,6 +218,80 @@ internal static class DocumentationService
         Foreground = Brush(color),
         TextWrapping = TextWrapping.Wrap
     };
+
+    private static Control InlineText(
+        string prefix,
+        string markdown,
+        double fontSize,
+        FontWeight weight,
+        IReadOnlyDictionary<string, string> colors,
+        Action<DocumentationPage> navigateTo,
+        string? textColor = null)
+    {
+        var matches = System.Text.RegularExpressions.Regex.Matches(markdown, @"\[([^\]]+)\]\(([^)]+)\)");
+        if (matches.Count == 0)
+        {
+            return Text(prefix + StripMarkdown(markdown), fontSize, weight, textColor ?? colors["TextPrimary"]);
+        }
+
+        var row = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal
+        };
+        if (!string.IsNullOrEmpty(prefix))
+        {
+            row.Children.Add(Text(prefix, fontSize, weight, textColor ?? colors["TextPrimary"]));
+        }
+
+        var index = 0;
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (match.Index > index)
+            {
+                row.Children.Add(Text(StripMarkdown(markdown[index..match.Index]), fontSize, weight, textColor ?? colors["TextPrimary"]));
+            }
+
+            var linkText = StripMarkdown(match.Groups[1].Value);
+            var href = match.Groups[2].Value;
+            var page = FindPage(href);
+            var link = new Button
+            {
+                Content = linkText,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
+                Foreground = Brush(colors["AccentBlue"]),
+                FontSize = fontSize,
+                FontWeight = weight,
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+            ToolTip.SetTip(link, href);
+            link.Click += (_, _) =>
+            {
+                if (page is not null)
+                {
+                    navigateTo(page);
+                }
+            };
+            row.Children.Add(link);
+            index = match.Index + match.Length;
+        }
+
+        if (index < markdown.Length)
+        {
+            row.Children.Add(Text(StripMarkdown(markdown[index..]), fontSize, weight, textColor ?? colors["TextPrimary"]));
+        }
+
+        return row;
+    }
+
+    private static DocumentationPage? FindPage(string href)
+    {
+        var id = Path.GetFileNameWithoutExtension(href).Trim().ToLowerInvariant();
+        return Pages.FirstOrDefault(page =>
+            page.Id.Equals(id, StringComparison.OrdinalIgnoreCase) ||
+            page.ResourcePath.EndsWith("/" + Path.GetFileName(href), StringComparison.OrdinalIgnoreCase));
+    }
 
     private static Border CodeBlock(string text, IReadOnlyDictionary<string, string> colors) => new()
     {

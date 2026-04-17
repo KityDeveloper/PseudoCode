@@ -334,6 +334,11 @@ public partial class MainWindow : Window
         await ShowDocumentationAsync(DocumentationService.JsonConfig);
     }
 
+    private async void PseudoLanguageDocumentation_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowDocumentationAsync(DocumentationService.PseudoLanguage);
+    }
+
     private async void SettingsConfiguration_Click(object? sender, RoutedEventArgs e)
     {
         await ShowSettingsConfigurationAsync();
