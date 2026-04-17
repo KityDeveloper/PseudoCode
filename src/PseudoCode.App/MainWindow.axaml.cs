@@ -277,9 +277,13 @@ public partial class MainWindow : Window
         {
             _currentDocument.OutputText = string.Empty;
             _currentDocument.DiagnosticsText = string.Empty;
+            _currentDocument.Diagnostics.Clear();
+            _currentDocument.DiagnosticLines.Clear();
             _currentDocument.VariablesText = string.Empty;
             _currentDocument.LastExecutionResult = null;
         }
+        UpdateDiagnosticUnderlines();
+        UpdateOutputPanelView();
         UpdateWindowState("Salida limpia");
     }
 
@@ -1231,6 +1235,7 @@ public partial class MainWindow : Window
         HighlightDebugLine(null);
         UpdateLineNumbers();
         UpdateVariablesList();
+        UpdateOutputPanelView();
         RenderOpenDocuments();
         UpdateWindowState("Editando");
     }
@@ -1576,9 +1581,10 @@ public partial class MainWindow : Window
         {
             _currentDocument.OutputText = outputText;
             _currentDocument.DiagnosticsText = diagnosticsText;
+            _currentDocument.Diagnostics = ParseDiagnostics(result.Diagnostics).ToList();
             _currentDocument.VariablesText = variablesText;
             _currentDocument.LastExecutionResult = result;
-            _currentDocument.DiagnosticLines = ExtractDiagnosticLineNumbers(result.Diagnostics).ToHashSet();
+            _currentDocument.DiagnosticLines = _currentDocument.Diagnostics.Select(diagnostic => diagnostic.Line).ToHashSet();
         }
 
         UpdateDiagnosticUnderlines();
@@ -2048,11 +2054,14 @@ public partial class MainWindow : Window
     private void UpdateOutputPanelView()
     {
         var document = _currentDocument;
-        OutputTextBox.Text = document is null
-            ? string.Empty
-            : _showDiagnostics
-                ? document.DiagnosticsText
-                : document.OutputText;
+        OutputTextBox.Text = document?.OutputText ?? string.Empty;
+        OutputTextBox.IsVisible = !_showDiagnostics;
+        DiagnosticProblemsScroll.IsVisible = _showDiagnostics;
+        RenderDiagnosticProblems(document);
+
+        var count = document?.Diagnostics.Count ?? 0;
+        DiagnosticCountBadge.IsVisible = count > 0;
+        DiagnosticCountText.Text = count > 99 ? "99+" : count.ToString();
 
         OutputTabButton.Foreground = _showDiagnostics ? Brush("TextSecondary") : Brush("TextPrimary");
         OutputTabButton.FontWeight = _showDiagnostics ? FontWeight.Normal : FontWeight.SemiBold;
@@ -2064,8 +2073,113 @@ public partial class MainWindow : Window
     {
         var diagnostics = _syntaxValidator.Validate(document.Text);
         document.DiagnosticsText = diagnostics.Count == 0 ? "Sin diagnosticos." : string.Join(Environment.NewLine, diagnostics);
-        document.DiagnosticLines = ExtractDiagnosticLineNumbers(diagnostics).ToHashSet();
+        document.Diagnostics = ParseDiagnostics(diagnostics).ToList();
+        document.DiagnosticLines = document.Diagnostics.Select(diagnostic => diagnostic.Line).ToHashSet();
         return diagnostics.Count > 0;
+    }
+
+    private void RenderDiagnosticProblems(OpenDocument? document)
+    {
+        DiagnosticProblemsPanel.Children.Clear();
+        var diagnostics = document?.Diagnostics ?? [];
+        if (diagnostics.Count == 0)
+        {
+            DiagnosticProblemsPanel.Children.Add(new TextBlock
+            {
+                Text = "Sin problemas.",
+                Foreground = Brush("TextSecondary"),
+                Margin = new Thickness(4)
+            });
+            return;
+        }
+
+        foreach (var diagnostic in diagnostics)
+        {
+            DiagnosticProblemsPanel.Children.Add(BuildDiagnosticProblemButton(diagnostic));
+        }
+    }
+
+    private Button BuildDiagnosticProblemButton(DiagnosticItem diagnostic)
+    {
+        var lineBadge = new Border
+        {
+            Background = Brush("AccentBlue"),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(8, 2),
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = new TextBlock
+            {
+                Text = $"Linea {diagnostic.Line}",
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.SemiBold,
+                FontSize = 12
+            }
+        };
+
+        var detail = new StackPanel
+        {
+            Spacing = 3,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = diagnostic.Message,
+                    Foreground = Brush("TextPrimary"),
+                    FontWeight = FontWeight.SemiBold,
+                    TextWrapping = TextWrapping.Wrap
+                },
+                new TextBlock
+                {
+                    Text = diagnostic.Cause,
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                },
+                new TextBlock
+                {
+                    Text = diagnostic.Solution,
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            }
+        };
+
+        var button = new Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = Brush("PanelBackground"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10),
+            Content = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                ColumnSpacing = 10,
+                Children =
+                {
+                    lineBadge,
+                    WithGridColumn(detail, 1)
+                }
+            }
+        };
+        button.Click += (_, _) => GoToDiagnostic(diagnostic);
+        return button;
+    }
+
+    private void GoToDiagnostic(DiagnosticItem diagnostic)
+    {
+        if (_currentDocument is null || EditorTextBox.Document is null)
+        {
+            return;
+        }
+
+        var line = Math.Clamp(diagnostic.Line, 1, EditorTextBox.Document.LineCount);
+        var documentLine = EditorTextBox.Document.GetLineByNumber(line);
+        EditorTextBox.Focus();
+        EditorTextBox.Select(documentLine.Offset, Math.Max(1, documentLine.Length));
+        EditorTextBox.CaretOffset = documentLine.Offset;
+        EditorTextBox.ScrollToLine(line);
+        UpdateWindowState($"Problema en linea {line}");
     }
 
     private void UpdateDiagnosticUnderlines()
@@ -2559,6 +2673,33 @@ public partial class MainWindow : Window
             {
                 yield return lineNumber;
             }
+        }
+    }
+
+    private static IEnumerable<DiagnosticItem> ParseDiagnostics(IEnumerable<string> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            var match = Regex.Match(
+                diagnostic,
+                @"^Linea\s+(?<line>\d+):\s*(?<message>.*?)(?:\.\s*Causa:\s*(?<cause>.*?))?(?:\.\s*Solucion:\s*(?<solution>.*?))?\.?$",
+                RegexOptions.IgnoreCase);
+
+            if (!match.Success || !int.TryParse(match.Groups["line"].Value, out var line))
+            {
+                yield return new DiagnosticItem(1, diagnostic, "Causa: no se pudo determinar la linea exacta.", "Solucion: revisa el mensaje completo.");
+                continue;
+            }
+
+            var message = match.Groups["message"].Value.Trim();
+            var cause = match.Groups["cause"].Success
+                ? "Causa: " + match.Groups["cause"].Value.Trim().TrimEnd('.')
+                : "Causa: revisa la instruccion marcada.";
+            var solution = match.Groups["solution"].Success
+                ? "Solucion: " + match.Groups["solution"].Value.Trim().TrimEnd('.')
+                : "Solucion: ajusta la linea segun el dialecto activo.";
+
+            yield return new DiagnosticItem(line, message.TrimEnd('.'), cause, solution);
         }
     }
 

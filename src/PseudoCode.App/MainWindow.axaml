@@ -200,12 +200,30 @@
                       FontWeight="SemiBold"
                       Padding="0" />
               <Button x:Name="DiagnosticsTabButton"
-                      Content="DIAGNOSTICOS"
                       Click="DiagnosticsView_Click"
                       Background="Transparent"
                       BorderThickness="0"
                       Foreground="{StaticResource TextSecondary}"
-                      Padding="0" />
+                      Padding="0">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <TextBlock Text="DIAGNOSTICOS" />
+                  <Border x:Name="DiagnosticCountBadge"
+                          IsVisible="False"
+                          MinWidth="18"
+                          Height="18"
+                          CornerRadius="9"
+                          Background="#DC2626"
+                          Padding="5,0">
+                    <TextBlock x:Name="DiagnosticCountText"
+                               Text="0"
+                               Foreground="White"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Border>
+                </StackPanel>
+              </Button>
             </StackPanel>
 
             <TextBlock Grid.Column="2"
@@ -219,17 +237,25 @@
 
         <Grid Grid.Row="1" ColumnDefinitions="2*,6,*" Background="{StaticResource OutputBackground}">
           <Grid RowDefinitions="*,Auto">
-            <TextBox x:Name="OutputTextBox"
-                     IsReadOnly="True"
-                     IsTabStop="False"
-                     TextWrapping="Wrap"
-                     Background="{StaticResource OutputBackground}"
-                     Foreground="{StaticResource TextPrimary}"
-                     BorderThickness="0"
-                     FontFamily="Cascadia Code,Consolas,monospace"
-                     FontSize="13"
-                     Padding="14"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            <Grid>
+              <TextBox x:Name="OutputTextBox"
+                       IsReadOnly="True"
+                       IsTabStop="False"
+                       TextWrapping="Wrap"
+                       Background="{StaticResource OutputBackground}"
+                       Foreground="{StaticResource TextPrimary}"
+                       BorderThickness="0"
+                       FontFamily="Cascadia Code,Consolas,monospace"
+                       FontSize="13"
+                       Padding="14"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto" />
+              <ScrollViewer x:Name="DiagnosticProblemsScroll"
+                            IsVisible="False"
+                            Background="{StaticResource OutputBackground}"
+                            VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="DiagnosticProblemsPanel" Margin="10" Spacing="8" />
+              </ScrollViewer>
+            </Grid>
 
             <Border Grid.Row="1"
                     x:Name="ConsoleInputPanel"

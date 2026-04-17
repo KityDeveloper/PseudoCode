@@ -7,6 +7,11 @@ internal sealed record HelpTopic(string Title, string Description, string Exampl
 
 internal sealed record CommandInfo(string Text, string InsertText, string Description, bool IsTemplate = false);
 
+internal sealed record DiagnosticItem(int Line, string Message, string Cause, string Solution)
+{
+    public string Summary => $"Linea {Line}: {Message}";
+}
+
 internal enum CloseDocumentChoice
 {
     Cancel,
@@ -29,6 +34,7 @@ internal sealed class OpenDocument
     public string Text { get; set; }
     public string OutputText { get; set; } = string.Empty;
     public string DiagnosticsText { get; set; } = "Sin diagnosticos.";
+    public List<DiagnosticItem> Diagnostics { get; set; } = [];
     public string VariablesText { get; set; } = string.Empty;
     public HashSet<int> DiagnosticLines { get; set; } = [];
     public bool HasUnsavedChanges { get; set; }
@@ -43,6 +49,7 @@ internal sealed class OpenDocument
         LastExecutionResult = null;
         OutputText = string.Empty;
         DiagnosticsText = "Sin diagnosticos.";
+        Diagnostics.Clear();
         VariablesText = string.Empty;
         DiagnosticLines.Clear();
         IsDebugging = false;
