@@ -4,7 +4,7 @@
 
 > Editor educativo para escribir, ejecutar y aprender pseudocodigo en español.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue)](CHANGELOG.md)
 [![Estado](https://img.shields.io/badge/estado-estable-brightgreen)](CHANGELOG.md)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#descargas)
 [![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
@@ -22,79 +22,113 @@ El dialecto principal sigue el estilo de **PSeInt**, con editor moderno, multipl
 
 ## Capturas
 
-Estas imagenes vienen de `docs/assets/screenshots`.
+Estas imagenes vienen de `docs/assets/screenshots` y reflejan la interfaz actual.
 
-### Vista general
+### Workspace vacio
 
-Editor principal con pestañas, explorador, panel de ayuda y area de salida.
+Pantalla inicial sin archivos abiertos, con accesos para crear un algoritmo o abrir uno existente.
 
-![Vista general](docs/assets/screenshots/pseudoCode.png)
+![Workspace vacio](docs/assets/screenshots/empty-workspace-dark.png)
 
 ### Editor principal
 
-Espacio de trabajo para escribir pseudocodigo, abrir varios archivos y ver ayuda contextual.
+Editor en modo oscuro con pestañas, explorador, ayuda por temas, salida, diagnosticos, variables y controles de ejecucion.
 
-![Editor principal](docs/assets/screenshots/editor-principal.png)
-
-### Depuracion paso a paso
-
-Ejecucion controlada con avance por linea usando `F10`, resaltado del paso actual e inspeccion de variables.
-
-![Depuracion paso a paso](docs/assets/screenshots/depuracion_paso_a_paso.png)
+![Editor principal](docs/assets/screenshots/editor-dark.png)
 
 ### Modo claro
 
-Tema claro para trabajar con fondos mas luminosos sin perder resaltado de sintaxis.
+La misma experiencia en modo claro, manteniendo los paneles, ayuda y controles legibles.
 
-![Modo claro](docs/assets/screenshots/modo_claro.png)
+![Modo claro](docs/assets/screenshots/editor-light.png)
 
-### Configuracion JSON
+### Multiples archivos y ayuda
 
-Ayuda integrada para entender dialectos, settings y temas de sintaxis configurables.
+Tabs para varios algoritmos, lista de archivos abiertos y panel de ayuda con ejemplos cargables.
 
-![Configuracion JSON](docs/assets/screenshots/ayuda_configuracion_json.png)
+![Multiples archivos y ayuda](docs/assets/screenshots/editor-multiples-archivos-ayuda.png)
+
+### Ejecucion viva
+
+Salida actualizandose mientras corre un algoritmo tipo reloj, con variables visibles y botones de pausa/stop.
+
+![Ejecucion viva](docs/assets/screenshots/reloj-ejecucion-viva.png)
+
+### Pausar y continuar
+
+La ejecucion puede pausarse y retomarse sin congelar la app.
+
+![Ejecucion pausada](docs/assets/screenshots/reloj-ejecucion-pausada.png)
+
+### Depuracion paso a paso
+
+Avance por linea con `F10`, resaltado del paso actual, salida y variables inspeccionables.
+
+![Depuracion paso a paso](docs/assets/screenshots/depuracion-paso-a-paso.png)
+
+### Diagnosticos
+
+Problemas agrupados con contador, linea afectada, causa y posible solucion.
+
+![Diagnosticos](docs/assets/screenshots/diagnosticos-problemas.png)
+
+### Autocompletado
+
+Sugerencias de instrucciones del dialecto activo mientras se escribe.
+
+![Autocompletado](docs/assets/screenshots/autocompletado-diagnosticos.png)
 
 ### Documentacion integrada
 
-Documentos Markdown renderizados dentro de la app desde el menu de ayuda.
+Ayuda Markdown renderizada dentro de la app con indice y ejemplos de codigo.
 
-![Documentacion integrada](docs/assets/screenshots/ayuda_documentacion.png)
+![Documentacion integrada](docs/assets/screenshots/documentacion-ayuda.png)
 
-### Menu Archivo
+### Pseudolenguaje
 
-Accesos para crear, abrir, guardar y cerrar algoritmos.
+Referencia del pseudolenguaje con bloques, comentarios, variables y estructuras.
 
-![Menu Archivo](docs/assets/screenshots/menu_archivo.png)
+![Pseudolenguaje](docs/assets/screenshots/documentacion-pseudolenguaje.png)
 
-### Menu Editar
+### Temas de codigo
 
-Comandos de edicion y acciones rapidas para trabajar con el codigo.
+Editor visual de colores de sintaxis con JSON, controles por campo, colores rapidos y vista previa.
 
-![Menu Editar](docs/assets/screenshots/menu_editar.png)
+![Temas de codigo](docs/assets/screenshots/temas-codigo-dark.png)
 
-### Menu Ejecutar
+### Temas en modo claro
 
-Opciones para ejecutar, depurar y controlar el flujo del algoritmo.
+Los temas de sintaxis tambien pueden editarse y previsualizarse con fondo claro.
 
-![Menu Ejecutar](docs/assets/screenshots/menu_ejecutar.png)
+![Temas en modo claro](docs/assets/screenshots/temas-codigo-light.png)
 
-### Menu Configuracion
+### Dialectos configurables
 
-Entrada para editar settings, temas de codigo fuente y dialectos directamente como JSON.
+Editor de dialectos JSON con campos editables y vista previa de como cambia la sintaxis.
 
-![Menu Configuracion](docs/assets/screenshots/menu_configuracion.png)
+![Dialectos configurables](docs/assets/screenshots/configurar-sintaxis-pseint.png)
 
-### Menu Ayuda
+### Dialecto en ingles
 
-Acceso a documentacion, notas de version, configuracion JSON y datos de la app.
+Ejemplo de dialecto reemplazable basado en PSeInt, pero con palabras reservadas en ingles.
 
-![Menu Ayuda](docs/assets/screenshots/menu_ayuda.png)
+![Dialecto en ingles](docs/assets/screenshots/configurar-sintaxis-english.png)
+
+### Menus principales
+
+Accesos a archivos, ejecucion, configuracion y ayuda desde la barra superior.
+
+![Menu ejecutar](docs/assets/screenshots/menu-ejecutar.png)
+
+![Menu configuracion](docs/assets/screenshots/menu-configuracion.png)
+
+![Menu ayuda](docs/assets/screenshots/menu-ayuda.png)
 
 ### Acerca de
 
-Ventana con version, logo de la app, datos del autor y enlaces oficiales.
+Version de la app, logo, autor Kity Dev, animacion del personaje y enlaces oficiales.
 
-![Acerca de PseudoCode](docs/assets/screenshots/acerca_de.png)
+![Acerca de PseudoCode](docs/assets/screenshots/acerca-de.png)
 
 ## Indice
 
@@ -171,7 +205,7 @@ La app tambien puede abrir estos documentos desde el menu **Ayuda**.
 
 ## Estado del proyecto
 
-Version actual: **1.1.0**
+Version actual: **1.1.1**
 
 PseudoCode esta en version estable. La app ya permite editar, abrir varios archivos, ejecutar pseudocodigo con salida en vivo, depurar paso a paso y configurar dialectos/colores desde JSON. Todavia hay trabajo planeado para tabla de prueba de escritorio, mas ejemplos y empaquetado mas pulido.
 

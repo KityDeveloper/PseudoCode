@@ -1,5 +1,22 @@
 # Notas de version
 
+## 1.1.1 - 2026-04-17
+
+Version estable de documentacion y presentacion del producto.
+
+### Cambios principales
+
+- README actualizado con capturas actuales de la app.
+- Screenshots renombrados con nombres descriptivos en `docs/assets/screenshots`.
+- Galeria reorganizada para mostrar workspace vacio, editor, ejecucion viva, depuracion, diagnosticos, documentacion, configuracion JSON y Acerca de.
+- Documentacion de publicacion actualizada para la version `1.1.1`.
+
+### Notas
+
+- Version estable, sin etiqueta beta ni alpha.
+- Autor: Kity Dev.
+- Algunos builds pueden no estar firmados todavia, por lo que Windows o macOS pueden mostrar una advertencia.
+
 ## 1.1.0 - 2026-04-17
 
 Version estable enfocada en hacer la ejecucion mas parecida a una terminal real y mejorar programas interactivos tipo reloj/temporizador.
