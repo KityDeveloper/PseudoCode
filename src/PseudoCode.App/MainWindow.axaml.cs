@@ -1,5 +1,3 @@
-using System.Data;
-using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia;
@@ -14,8 +12,6 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
-using AvaloniaEdit.Editing;
-using AvaloniaEdit.Rendering;
 using PseudoCode.App.Services;
 
 namespace PseudoCode.App;
@@ -32,6 +28,11 @@ public partial class MainWindow : Window
     private const double InterfaceScaleStep = 0.1;
 
     private readonly List<OpenDocument> _openDocuments = [];
+    private readonly RuntimeSettings _runtimeSettings;
+    private readonly PseudoLanguageDefinition _language;
+    private readonly PseudoSyntaxValidator _syntaxValidator;
+    private readonly CommandInfo[] _completionItems;
+    private readonly HelpTopic[] _helpTopics;
     private OpenDocument? _currentDocument;
     private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
@@ -45,6 +46,11 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _runtimeSettings = AppSettingsService.Load();
+        _language = _runtimeSettings.Language;
+        _syntaxValidator = new PseudoSyntaxValidator(_language);
+        _completionItems = _language.Snippets.ToArray();
+        _helpTopics = BuildDefaultHelpTopics(_language);
         InitializeComponent();
         ConfigureEditor();
         BuildEditorTools();
@@ -55,7 +61,9 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, Editor_Drop);
         UpdateLineNumbers();
         UpdateEmptyWorkspaceState();
-        UpdateWindowState("Listo para escribir pseudocodigo");
+        UpdateWindowState(_runtimeSettings.Diagnostics.Count == 0
+            ? $"Listo - dialecto {_language.DisplayName}"
+            : $"Listo con avisos de settings - {_language.DisplayName}");
     }
 
     private async void OpenFile_Click(object? sender, RoutedEventArgs e)
@@ -232,20 +240,41 @@ public partial class MainWindow : Window
 
     private void LoadFirstHelpExample_Click(object? sender, RoutedEventArgs e)
     {
-        LoadHelpExample(HelpTopics[0]);
+        LoadHelpExample(_helpTopics[0]);
+    }
+
+    private async void Documentation_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowDocumentationAsync(DocumentationService.Help);
+    }
+
+    private async void JsonConfiguration_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowDocumentationAsync(DocumentationService.JsonConfig);
+    }
+
+    private async void ReleaseNotes_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowDocumentationAsync(DocumentationService.ReleaseNotes);
+    }
+
+    private async Task ShowDocumentationAsync(DocumentationPage page)
+    {
+        var window = DocumentationService.BuildWindow(page, _isLightTheme ? LightTheme : DarkTheme);
+        await window.ShowDialog(this);
     }
 
     private async void About_Click(object? sender, RoutedEventArgs e)
     {
         var window = new Window
         {
-            Title = "Acerca de Kity Dev",
+            Title = "Acerca de PseudoCode",
             Width = 420,
-            Height = 360,
+            Height = 390,
             MinWidth = 420,
-            MinHeight = 360,
+            MinHeight = 390,
             MaxWidth = 420,
-            MaxHeight = 360,
+            MaxHeight = 390,
             CanResize = false,
             CanMinimize = false,
             CanMaximize = false,
@@ -272,7 +301,7 @@ public partial class MainWindow : Window
                 icon,
                 new TextBlock
                 {
-                    Text = "Kity Dev",
+                    Text = AppInfoService.AppName,
                     Foreground = Brush("TextPrimary"),
                     FontSize = 22,
                     FontWeight = FontWeight.SemiBold,
@@ -280,14 +309,21 @@ public partial class MainWindow : Window
                 },
                 new TextBlock
                 {
-                    Text = "PseudoCode",
+                    Text = $"Version: {AppInfoService.Version}",
                     Foreground = Brush("TextSecondary"),
                     FontSize = 15,
                     HorizontalAlignment = HorizontalAlignment.Center
                 },
-                BuildAboutLink("YouTube", "@KityDev - https://www.youtube.com/@KityDev", "https://www.youtube.com/@KityDev"),
-                BuildAboutLink("GitHub", "https://github.com/KityDeveloper", "https://github.com/KityDeveloper"),
-                BuildAboutLink("Web", "kity.dev", "https://kity.dev"),
+                new TextBlock
+                {
+                    Text = $"Autor: {AppInfoService.Author}",
+                    Foreground = Brush("TextSecondary"),
+                    FontSize = 15,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                },
+                BuildAboutLink("YouTube", "@KityDev - https://www.youtube.com/@KityDev", AppInfoService.YouTubeUrl),
+                BuildAboutLink("GitHub", AppInfoService.GitHubUrl, AppInfoService.GitHubUrl),
+                BuildAboutLink("Web", "kity.dev", AppInfoService.WebUrl),
                 new Button
                 {
                     Content = "Cerrar",
@@ -547,7 +583,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var document = new OpenDocument(file.Name, text)
+        var document = new OpenDocument(file.Name, text, _language)
         {
             File = file,
             Location = file.Path.LocalPath
@@ -621,11 +657,12 @@ public partial class MainWindow : Window
     {
         EditorTextBox.Options.ConvertTabsToSpaces = true;
         EditorTextBox.Options.IndentationSize = 4;
-        _colorizer = new PseudoCodeColorizer(PseudoCodeColorizer.DarkPalette);
+        var palette = _runtimeSettings.DarkSyntaxTheme.ToPalette();
+        _colorizer = new PseudoCodeColorizer(_language, palette);
         EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
-        _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer();
+        _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer(palette.DiagnosticUnderlineBrush);
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
-        ApplyEditorTheme(DarkTheme, PseudoCodeColorizer.DarkPalette);
+        ApplyEditorTheme(DarkTheme, palette);
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
@@ -774,7 +811,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var matches = CompletionItems
+        var matches = _completionItems
             .Where(item => item.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(item => item.Text.Equals(prefix, StringComparison.OrdinalIgnoreCase))
             .ThenBy(item => item.Text)
@@ -794,7 +831,7 @@ public partial class MainWindow : Window
         _completionWindow.Closed += (_, _) => _completionWindow = null;
 
         var data = _completionWindow.CompletionList.CompletionData;
-        foreach (var item in matches.Length == 0 ? CompletionItems : matches)
+        foreach (var item in matches.Length == 0 ? _completionItems : matches)
         {
             data.Add(new PseudoCompletionData(item));
         }
@@ -889,7 +926,7 @@ public partial class MainWindow : Window
 
     private void AddNewDocument()
     {
-        var document = new OpenDocument($"Nuevo {_newAlgorithmNumber++}.psc", SampleProgram);
+        var document = new OpenDocument($"Nuevo {_newAlgorithmNumber++}.psc", BuildSampleProgram(_language), _language);
         _openDocuments.Add(document);
         SwitchDocument(document);
         UpdateWindowState($"Nuevo algoritmo: {document.DisplayName}");
@@ -961,7 +998,7 @@ public partial class MainWindow : Window
 
     private bool UpdateLiveSyntaxDiagnostics(OpenDocument document)
     {
-        var diagnostics = PseudoSyntaxValidator.Validate(document.Text);
+        var diagnostics = _syntaxValidator.Validate(document.Text);
         document.DiagnosticsText = diagnostics.Count == 0 ? "Sin diagnosticos." : string.Join(Environment.NewLine, diagnostics);
         document.DiagnosticLines = ExtractDiagnosticLineNumbers(diagnostics).ToHashSet();
         return diagnostics.Count > 0;
@@ -1075,7 +1112,7 @@ public partial class MainWindow : Window
 
     private void BuildHelpTopics()
     {
-        foreach (var topic in HelpTopics)
+        foreach (var topic in _helpTopics)
         {
             var description = new TextBlock
             {
@@ -1139,7 +1176,7 @@ public partial class MainWindow : Window
 
     private void BuildEditorTools()
     {
-        foreach (var template in CompletionItems.Where(item => item.IsTemplate))
+        foreach (var template in _completionItems.Where(item => item.IsTemplate))
         {
             var button = new Button
             {
@@ -1154,7 +1191,7 @@ public partial class MainWindow : Window
             TemplatesPanel.Children.Add(button);
         }
 
-        CommandsList.ItemsSource = CompletionItems
+        CommandsList.ItemsSource = _completionItems
             .Select(item => $"{item.Text} - {item.Description}")
             .ToArray();
         OperatorsList.ItemsSource = new[]
@@ -1168,7 +1205,7 @@ public partial class MainWindow : Window
             "= igual",
             "<> diferente",
             "< <= > >= comparaciones",
-            "Y, O, NO operadores logicos"
+            $"{_language.Keyword("and")}, {_language.Keyword("or")}, {_language.Keyword("not")} operadores logicos"
         };
         UpdateVariablesList();
     }
@@ -1186,10 +1223,12 @@ public partial class MainWindow : Window
         VariablesList.ItemsSource = names.Length == 0 ? new[] { "Sin variables todavia" } : names;
     }
 
-    private static IEnumerable<string> ExtractVariables(string source)
+    private IEnumerable<string> ExtractVariables(string source)
     {
         var variables = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match match in Regex.Matches(source, @"(?im)^\s*Definir\s+(.+?)(?:\s+Como\s+\w+)?\s*$"))
+        var declare = Regex.Escape(_language.Keyword("declare"));
+        var typeSeparator = Regex.Escape(_language.Keyword("typeSeparator"));
+        foreach (Match match in Regex.Matches(source, $@"(?im)^\s*{declare}\s+(.+?)(?:\s+{typeSeparator}\s+\w+)?\s*$"))
         {
             foreach (var name in match.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
@@ -1211,7 +1250,7 @@ public partial class MainWindow : Window
     private void LoadHelpExample(HelpTopic topic)
     {
         SaveCurrentDocumentState();
-        var document = new OpenDocument($"{topic.Title}.psc", topic.Example)
+        var document = new OpenDocument($"{topic.Title}.psc", topic.Example, _language)
         {
             HasUnsavedChanges = true,
             Location = "Ejemplo de ayuda"
@@ -1239,7 +1278,7 @@ public partial class MainWindow : Window
             }
         }
 
-        ApplyEditorTheme(colors, _isLightTheme ? PseudoCodeColorizer.LightPalette : PseudoCodeColorizer.DarkPalette);
+        ApplyEditorTheme(colors, _isLightTheme ? _runtimeSettings.LightSyntaxTheme.ToPalette() : _runtimeSettings.DarkSyntaxTheme.ToPalette());
         RenderOpenDocuments();
         UpdateOutputPanelView();
     }
@@ -1255,6 +1294,7 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.CurrentLineBackground = BrushFromTheme(colors, "LineNumberBackground");
         EditorTextBox.TextArea.TextView.CurrentLineBorder = new Pen(BrushFromTheme(colors, "BorderBrushMuted"), 1);
         _colorizer?.SetPalette(syntaxPalette);
+        _diagnosticUnderlineRenderer?.SetBrush(syntaxPalette.DiagnosticUnderlineBrush);
         EditorTextBox.TextArea.TextView.Redraw();
     }
 
@@ -1285,12 +1325,12 @@ public partial class MainWindow : Window
         var link = new HyperlinkButton
         {
             Content = text,
-            NavigateUri = new Uri(uri),
             Foreground = Brush("AccentBlue"),
             Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center
         };
+        link.Click += async (_, _) => await OpenExternalLinkAsync(uri);
         var copyLinkItem = new MenuItem
         {
             Header = "Copiar link"
@@ -1313,19 +1353,36 @@ public partial class MainWindow : Window
         return row;
     }
 
-    private static bool StartsLogicalBlock(string text) =>
-        StartsWithAny(text, "Algoritmo ", "Proceso ", "Si ", "Mientras ", "Para ", "Segun ");
+    private async Task OpenExternalLinkAsync(string uri)
+    {
+        var launcher = TopLevel.GetTopLevel(this)?.Launcher;
+        if (launcher is not null && await launcher.LaunchUriAsync(new Uri(uri)))
+        {
+            return;
+        }
 
-    private static bool StartsWithAny(string text, params string[] prefixes) =>
-        prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (Clipboard is not null)
+        {
+            await Clipboard.SetTextAsync(uri);
+        }
+        UpdateWindowState("No pude abrir el navegador; copie el link");
+    }
 
-    private static string BuildOutputText(ExecutionResult result)
+    private bool StartsLogicalBlock(string text) =>
+        _language.StartsWithKeyword(text, "algorithmStart") ||
+        _language.StartsWithKeyword(text, "processStart") ||
+        _language.StartsWithKeyword(text, "if") ||
+        _language.StartsWithKeyword(text, "while") ||
+        _language.StartsWithKeyword(text, "for") ||
+        _language.StartsWithKeyword(text, "switch");
+
+    private string BuildOutputText(ExecutionResult result)
     {
         var builder = new StringBuilder();
 
         if (result.Output.Count == 0)
         {
-            builder.AppendLine("Sin salida. Usa Escribir para mostrar datos.");
+            builder.AppendLine($"Sin salida. Usa {_language.Keyword("write")} para mostrar datos.");
         }
         else
         {
@@ -1382,104 +1439,68 @@ public partial class MainWindow : Window
         return builder.ToString();
     }
 
-    private sealed record HelpTopic(string Title, string Description, string Example, bool IsExpanded = false);
-
-    private enum CloseDocumentChoice
+    private static HelpTopic[] BuildDefaultHelpTopics(PseudoLanguageDefinition language)
     {
-        Cancel,
-        Save,
-        Discard
-    }
+        var algorithm = language.Keyword("algorithmStart");
+        var endAlgorithm = language.Keyword("algorithmEnd");
+        var declare = language.Keyword("declare");
+        var typeSeparator = language.Keyword("typeSeparator");
+        var write = language.Keyword("write");
+        var read = language.Keyword("read");
 
-    private sealed class OpenDocument(string displayName, string text)
-    {
-        public IStorageFile? File { get; set; }
-        public string DisplayName { get; set; } = displayName;
-        public string Location { get; set; } = "Sin guardar";
-        public string Text { get; set; } = text;
-        public string OutputText { get; set; } = string.Empty;
-        public string DiagnosticsText { get; set; } = "Sin diagnosticos.";
-        public string VariablesText { get; set; } = string.Empty;
-        public HashSet<int> DiagnosticLines { get; set; } = [];
-        public bool HasUnsavedChanges { get; set; }
-        public ExecutionResult? LastExecutionResult { get; set; }
-        public AdvancedPseudoInterpreter Interpreter { get; } = new();
-    }
-
-    private static readonly CommandInfo[] CompletionItems =
-    [
-        new("Algoritmo", "Algoritmo MiPrograma\n    \nFinAlgoritmo", "Define el inicio y fin de un algoritmo.", true),
-        new("Definir", "Definir variable Como Entero", "Declara una o varias variables.", true),
-        new("Escribir", "Escribir \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
-        new("Leer", "Leer variable", "Espera un valor en la consola antes de continuar.", true),
-        new("Si", "Si condicion Entonces\n    \nFinSi", "Bloque condicional.", true),
-        new("Si/Sino", "Si condicion Entonces\n    \nSino\n    \nFinSi", "Condicional con alternativa.", true),
-        new("Mientras", "Mientras condicion Hacer\n    \nFinMientras", "Repite mientras se cumpla una condicion.", true),
-        new("Para", "Para i <- 1 Hasta 10 Hacer\n    \nFinPara", "Repite con contador.", true),
-        new("Segun", "Segun opcion Hacer\n    1:\n        \nFinSegun", "Seleccion multiple.", true),
-        new("Entero", "Entero", "Tipo numerico entero."),
-        new("Real", "Real", "Tipo numerico decimal."),
-        new("Cadena", "Cadena", "Tipo de texto."),
-        new("Logico", "Logico", "Tipo verdadero/falso."),
-        new("Verdadero", "Verdadero", "Valor logico verdadero."),
-        new("Falso", "Falso", "Valor logico falso."),
-        new("Y", "Y", "Operador logico AND."),
-        new("O", "O", "Operador logico OR."),
-        new("NO", "NO", "Negacion logica.")
-    ];
-
-    private static readonly HelpTopic[] HelpTopics =
-    [
-        new(
-            "Estructura base",
-            "La forma minima de un algoritmo: inicio, instrucciones y cierre.",
-            """
-Algoritmo MiPrograma
-    Escribir "Hola desde PseudoCode"
-FinAlgoritmo
+        return
+        [
+            new(
+                "Estructura base",
+                "La forma minima de un algoritmo: inicio, instrucciones y cierre.",
+                $"""
+{algorithm} MiPrograma
+    {write} "Hola desde PseudoCode"
+{endAlgorithm}
 """,
-            true),
-        new(
-            "Variables",
-            "Declara datos con Definir y guarda valores con <-.",
-            """
-Algoritmo Variables
-    Definir edad Como Entero
-    Definir nombre Como Cadena
+                true),
+            new(
+                "Variables",
+                $"Declara datos con {declare} y guarda valores con <-.",
+                $"""
+{algorithm} Variables
+    {declare} edad {typeSeparator} Entero
+    {declare} nombre {typeSeparator} Cadena
 
     nombre <- "Ada"
     edad <- 19
 
-    Escribir "Nombre: ", nombre
-    Escribir "Edad: ", edad
-FinAlgoritmo
+    {write} "Nombre: ", nombre
+    {write} "Edad: ", edad
+{endAlgorithm}
 """),
-        new(
-            "Entrada y salida",
-            "Leer pausa la ejecucion hasta que escribas un valor en la consola.",
-            """
-Algoritmo EntradaSalida
-    Definir numero Como Entero
+            new(
+                "Entrada y salida",
+                $"{read} pausa la ejecucion hasta que escribas un valor en la consola.",
+                $"""
+{algorithm} EntradaSalida
+    {declare} numero {typeSeparator} Entero
 
-    Leer numero
-    Escribir "Numero recibido: ", numero
-FinAlgoritmo
+    {read} numero
+    {write} "Numero recibido: ", numero
+{endAlgorithm}
 """),
-        new(
-            "Operaciones",
-            "Puedes combinar numeros y variables en expresiones aritmeticas.",
-            """
-Algoritmo Operaciones
-    Definir a, b, total Como Entero
+            new(
+                "Operaciones",
+                "Puedes combinar numeros y variables en expresiones aritmeticas.",
+                $"""
+{algorithm} Operaciones
+    {declare} a, b, total {typeSeparator} Entero
 
     a <- 8
     b <- 4
     total <- a + b * 2
 
-    Escribir "Resultado: ", total
-FinAlgoritmo
+    {write} "Resultado: ", total
+{endAlgorithm}
 """)
-    ];
+        ];
+    }
 
     private static readonly IReadOnlyDictionary<string, string> DarkTheme = new Dictionary<string, string>
     {
@@ -1529,889 +1550,10 @@ FinAlgoritmo
         ["AccentBlue"] = "#2563EB"
     };
 
-    private const string SampleProgram = """
-Algoritmo
+    private static string BuildSampleProgram(PseudoLanguageDefinition language) =>
+        $"""
+{language.Keyword("algorithmStart")}
 
-FinAlgoritmo
+{language.Keyword("algorithmEnd")}
 """;
-}
-
-internal sealed record CommandInfo(string Text, string InsertText, string Description, bool IsTemplate = false);
-
-internal sealed class AdvancedPseudoInterpreter
-{
-    private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
-    private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<string> _output = [];
-    private readonly List<string> _diagnostics = [];
-    private readonly List<string> _inputs = [];
-    private IReadOnlyList<Node> _program = [];
-    private int _inputIndex;
-    private string? _waitingInputVariable;
-
-    public ExecutionResult Start(string source)
-    {
-        _inputs.Clear();
-        _program = Parse(source);
-        return ExecuteFromStart();
-    }
-
-    public ExecutionResult Continue(string input)
-    {
-        if (_waitingInputVariable is null)
-        {
-            _diagnostics.Add("Linea 1: no hay ninguna instruccion Leer esperando datos. Causa: la ejecucion no esta pausada. Solucion: ejecuta un algoritmo con Leer antes de enviar datos.");
-            return BuildResult();
-        }
-
-        _inputs.Add(input);
-        return ExecuteFromStart();
-    }
-
-    private ExecutionResult ExecuteFromStart()
-    {
-        _variables.Clear();
-        _output.Clear();
-        _diagnostics.Clear();
-        _waitingInputVariable = null;
-        _inputIndex = 0;
-        ExecuteBlock(_program);
-        return BuildResult();
-    }
-
-    private IReadOnlyList<Node> Parse(string source)
-    {
-        var lines = source.Replace("\r\n", "\n").Split('\n')
-            .Select((text, index) => new SourceLine(index + 1, RemoveComment(text).Trim()))
-            .Where(line => line.Text.Length > 0)
-            .ToArray();
-        var index = 0;
-        return ParseBlock(lines, ref index, []);
-    }
-
-    private List<Node> ParseBlock(IReadOnlyList<SourceLine> lines, ref int index, params string[] terminators)
-    {
-        var nodes = new List<Node>();
-        while (index < lines.Count)
-        {
-            var text = lines[index].Text;
-            if (terminators.Any(term => text.Equals(term, StringComparison.OrdinalIgnoreCase)) ||
-                terminators.Contains("Case") &&
-                (IsSwitchCase(text) || text.Equals("De Otro Modo:", StringComparison.OrdinalIgnoreCase) || text.Equals("De Otro Modo", StringComparison.OrdinalIgnoreCase)))
-            {
-                break;
-            }
-
-            nodes.Add(ParseNode(lines, ref index));
-        }
-
-        return nodes;
-    }
-
-    private Node ParseNode(IReadOnlyList<SourceLine> lines, ref int index)
-    {
-        var line = lines[index];
-        var text = line.Text;
-
-        if (text.Equals("Algoritmo", StringComparison.OrdinalIgnoreCase) ||
-            text.Equals("Proceso", StringComparison.OrdinalIgnoreCase) ||
-            StartsWithAny(text, "Algoritmo ", "Proceso ") ||
-            text.Equals("FinAlgoritmo", StringComparison.OrdinalIgnoreCase) ||
-            text.Equals("FinProceso", StringComparison.OrdinalIgnoreCase))
-        {
-            index++;
-            return new NoOp(line.Number);
-        }
-
-        if (text.StartsWith("Definir ", StringComparison.OrdinalIgnoreCase))
-        {
-            index++;
-            var declaration = text["Definir ".Length..];
-            var separator = declaration.IndexOf(" Como ", StringComparison.OrdinalIgnoreCase);
-            return new Declare(line.Number, SplitNames(separator >= 0 ? declaration[..separator] : declaration));
-        }
-
-        if (text.StartsWith("Escribir ", StringComparison.OrdinalIgnoreCase))
-        {
-            index++;
-            return new Write(line.Number, SplitArguments(text["Escribir ".Length..]));
-        }
-
-        if (text.StartsWith("Leer ", StringComparison.OrdinalIgnoreCase))
-        {
-            index++;
-            return new Read(line.Number, SplitNames(text["Leer ".Length..]));
-        }
-
-        var ifMatch = Regex.Match(text, @"^Si\s+(.+)\s+Entonces$", RegexOptions.IgnoreCase);
-        if (ifMatch.Success)
-        {
-            index++;
-            var thenBody = ParseBlock(lines, ref index, "Sino", "FinSi");
-            var elseBody = new List<Node>();
-            if (index < lines.Count && lines[index].Text.Equals("Sino", StringComparison.OrdinalIgnoreCase))
-            {
-                index++;
-                elseBody = ParseBlock(lines, ref index, "FinSi");
-            }
-            Consume(lines, ref index, "FinSi", line.Number, "Si");
-            return new If(line.Number, ifMatch.Groups[1].Value.Trim(), thenBody, elseBody);
-        }
-
-        var whileMatch = Regex.Match(text, @"^Mientras\s+(.+)\s+Hacer$", RegexOptions.IgnoreCase);
-        if (whileMatch.Success)
-        {
-            index++;
-            var body = ParseBlock(lines, ref index, "FinMientras");
-            Consume(lines, ref index, "FinMientras", line.Number, "Mientras");
-            return new While(line.Number, whileMatch.Groups[1].Value.Trim(), body);
-        }
-
-        var forMatch = Regex.Match(text, @"^Para\s+([A-Za-z_][A-Za-z0-9_]*)\s*<-\s*(.+)\s+Hasta\s+(.+)\s+Hacer$", RegexOptions.IgnoreCase);
-        if (forMatch.Success)
-        {
-            index++;
-            var body = ParseBlock(lines, ref index, "FinPara");
-            Consume(lines, ref index, "FinPara", line.Number, "Para");
-            return new For(line.Number, forMatch.Groups[1].Value, forMatch.Groups[2].Value.Trim(), forMatch.Groups[3].Value.Trim(), body);
-        }
-
-        var switchMatch = Regex.Match(text, @"^Segun\s+(.+)\s+Hacer$", RegexOptions.IgnoreCase);
-        if (switchMatch.Success)
-        {
-            return ParseSwitch(lines, ref index, line.Number, switchMatch.Groups[1].Value.Trim());
-        }
-
-        var assignmentIndex = text.IndexOf("<-", StringComparison.Ordinal);
-        if (assignmentIndex > 0)
-        {
-            index++;
-            return new Assign(line.Number, text[..assignmentIndex].Trim(), text[(assignmentIndex + 2)..].Trim());
-        }
-
-        _diagnostics.Add($"Linea {line.Number}: instruccion desconocida. Causa: '{text}' no coincide con el pseudocodigo soportado. Solucion: revisa la palabra clave o consulta la ayuda.");
-        index++;
-        return new NoOp(line.Number);
-    }
-
-    private Node ParseSwitch(IReadOnlyList<SourceLine> lines, ref int index, int lineNumber, string expression)
-    {
-        index++;
-        var cases = new List<SwitchCase>();
-        List<Node> defaultBody = [];
-        while (index < lines.Count && !lines[index].Text.Equals("FinSegun", StringComparison.OrdinalIgnoreCase))
-        {
-            var line = lines[index];
-            if (line.Text.Equals("De Otro Modo:", StringComparison.OrdinalIgnoreCase) || line.Text.Equals("De Otro Modo", StringComparison.OrdinalIgnoreCase))
-            {
-                index++;
-                defaultBody = ParseBlock(lines, ref index, "FinSegun", "Case");
-                continue;
-            }
-            if (IsSwitchCase(line.Text))
-            {
-                index++;
-                var values = line.Text.TrimEnd(':').Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                cases.Add(new SwitchCase(line.Number, values, ParseBlock(lines, ref index, "FinSegun", "Case")));
-                continue;
-            }
-            _diagnostics.Add($"Linea {line.Number}: caso mal formado en Segun. Causa: los casos deben terminar con ':'. Solucion: usa '1:' o 'De Otro Modo:'.");
-            index++;
-        }
-        Consume(lines, ref index, "FinSegun", lineNumber, "Segun");
-        return new Switch(lineNumber, expression, cases, defaultBody);
-    }
-
-    private void Consume(IReadOnlyList<SourceLine> lines, ref int index, string terminator, int lineNumber, string blockName)
-    {
-        if (index < lines.Count && lines[index].Text.Equals(terminator, StringComparison.OrdinalIgnoreCase))
-        {
-            index++;
-            return;
-        }
-        _diagnostics.Add($"Linea {lineNumber}: falta '{terminator}'. Causa: el bloque '{blockName}' quedo abierto. Solucion: agrega '{terminator}'.");
-    }
-
-    private void ExecuteBlock(IReadOnlyList<Node> nodes)
-    {
-        foreach (var node in nodes)
-        {
-            if (_waitingInputVariable is not null) return;
-            Execute(node);
-        }
-    }
-
-    private void Execute(Node node)
-    {
-        switch (node)
-        {
-            case NoOp:
-                return;
-            case Declare declare:
-                foreach (var name in declare.Names)
-                {
-                    if (Identifier.IsMatch(name)) _variables.TryAdd(name, 0d);
-                    else AddRuntime(node.Line, $"'{name}' no es un nombre valido", "usa caracteres no permitidos", "usa letras, numeros y guion bajo");
-                }
-                return;
-            case Assign assign:
-                if (!Identifier.IsMatch(assign.Name)) AddRuntime(node.Line, $"'{assign.Name}' no es un destino valido", "el lado izquierdo debe ser variable", "usa 'total <- 10'");
-                else _variables[assign.Name] = EvaluateValue(assign.Expression, node.Line);
-                return;
-            case Write write:
-                _output.Add(string.Concat(write.Expressions.Select(expression => FormatValue(EvaluateValue(expression, node.Line)))));
-                return;
-            case Read read:
-                foreach (var name in read.Names)
-                {
-                    _output.Add($"? {name}:");
-                    if (_inputIndex >= _inputs.Count)
-                    {
-                        _waitingInputVariable = name;
-                        return;
-                    }
-                    var input = _inputs[_inputIndex++];
-                    _variables[name] = ParseInput(input);
-                    _output.Add($"> {input}");
-                }
-                return;
-            case If conditional:
-                ExecuteBlock(ToBoolean(EvaluateCondition(conditional.Condition, node.Line)) ? conditional.ThenBody : conditional.ElseBody);
-                return;
-            case While loop:
-                for (var guard = 0; ToBoolean(EvaluateCondition(loop.Condition, node.Line)); guard++)
-                {
-                    if (guard > 10000) { AddRuntime(node.Line, "ciclo Mientras detenido", "supero 10000 iteraciones", "revisa que la condicion cambie"); return; }
-                    ExecuteBlock(loop.Body);
-                    if (_waitingInputVariable is not null) return;
-                }
-                return;
-            case For loop:
-                var start = ToNumber(EvaluateValue(loop.Start, node.Line));
-                var end = ToNumber(EvaluateValue(loop.End, node.Line));
-                for (var value = start; value <= end; value++)
-                {
-                    _variables[loop.Variable] = value;
-                    ExecuteBlock(loop.Body);
-                    if (_waitingInputVariable is not null) return;
-                }
-                return;
-            case Switch selection:
-                var selected = EvaluateValue(selection.Expression, node.Line);
-                foreach (var option in selection.Cases)
-                {
-                    if (option.Values.Any(value => ValuesEqual(selected, EvaluateValue(value, option.Line))))
-                    {
-                        ExecuteBlock(option.Body);
-                        return;
-                    }
-                }
-                ExecuteBlock(selection.DefaultBody);
-                return;
-        }
-    }
-
-    private object? EvaluateValue(string expression, int line)
-    {
-        expression = expression.Trim();
-        if (expression.Length == 0) return string.Empty;
-        if (IsQuoted(expression)) return expression[1..^1];
-        if (expression.Equals("Verdadero", StringComparison.OrdinalIgnoreCase)) return true;
-        if (expression.Equals("Falso", StringComparison.OrdinalIgnoreCase)) return false;
-        if (_variables.TryGetValue(expression, out var variable)) return variable;
-        try
-        {
-            return Convert.ToDouble(new DataTable().Compute(ReplaceVariables(expression, line), null), CultureInfo.InvariantCulture);
-        }
-        catch
-        {
-            AddRuntime(line, $"no pude evaluar '{expression}'", "la expresion no es valida", "revisa operadores, parentesis y variables");
-            return string.Empty;
-        }
-    }
-
-    private object? EvaluateCondition(string condition, int line)
-    {
-        condition = condition.Trim();
-        if (condition.StartsWith("NO ", StringComparison.OrdinalIgnoreCase)) return !ToBoolean(EvaluateCondition(condition[3..], line));
-        var orParts = SplitLogical(condition, "O");
-        if (orParts.Count > 1) return orParts.Any(part => ToBoolean(EvaluateCondition(part, line)));
-        var andParts = SplitLogical(condition, "Y");
-        if (andParts.Count > 1) return andParts.All(part => ToBoolean(EvaluateCondition(part, line)));
-        var comparison = FindComparison(condition);
-        if (comparison is null) return EvaluateValue(condition, line);
-        var left = EvaluateValue(condition[..comparison.Value.Index], line);
-        var right = EvaluateValue(condition[(comparison.Value.Index + comparison.Value.Operator.Length)..], line);
-        return Compare(left, right, comparison.Value.Operator);
-    }
-
-    private string ReplaceVariables(string expression, int line) =>
-        Regex.Replace(expression, @"\b[A-Za-z_][A-Za-z0-9_]*\b", match =>
-        {
-            if (match.Value.Equals("Verdadero", StringComparison.OrdinalIgnoreCase)) return "true";
-            if (match.Value.Equals("Falso", StringComparison.OrdinalIgnoreCase)) return "false";
-            if (!_variables.TryGetValue(match.Value, out var value))
-            {
-                AddRuntime(line, $"la variable '{match.Value}' no tiene valor", "no fue definida/asignada antes de usarse", "declara o asigna la variable primero");
-                return "0";
-            }
-            return value is bool boolean ? (boolean ? "true" : "false") : Convert.ToString(value, CultureInfo.InvariantCulture) ?? "0";
-        });
-
-    private ExecutionResult BuildResult() => new(
-        _diagnostics.Count == 0 && _waitingInputVariable is null,
-        _output.ToArray(),
-        _diagnostics.ToArray(),
-        new Dictionary<string, object?>(_variables),
-        _waitingInputVariable is not null,
-        _waitingInputVariable);
-
-    private void AddRuntime(int line, string problem, string cause, string solution) =>
-        _diagnostics.Add($"Linea {line}: {problem}. Causa: {cause}. Solucion: {solution}.");
-
-    private static (int Index, string Operator)? FindComparison(string text)
-    {
-        var inString = false;
-        for (var index = 0; index < text.Length; index++)
-        {
-            if (text[index] == '"') { inString = !inString; continue; }
-            if (inString) continue;
-            foreach (var op in new[] { "<>", "<=", ">=", "=", "<", ">" })
-                if (index + op.Length <= text.Length && text.Substring(index, op.Length) == op) return (index, op);
-        }
-        return null;
-    }
-
-    private static bool Compare(object? left, object? right, string op)
-    {
-        if (left is string || right is string)
-        {
-            var comparison = string.Compare(Convert.ToString(left, CultureInfo.InvariantCulture), Convert.ToString(right, CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase);
-            return op switch { "=" => comparison == 0, "<>" => comparison != 0, "<" => comparison < 0, "<=" => comparison <= 0, ">" => comparison > 0, ">=" => comparison >= 0, _ => false };
-        }
-        var l = ToNumber(left);
-        var r = ToNumber(right);
-        return op switch { "=" => Math.Abs(l - r) < 0.0000001, "<>" => Math.Abs(l - r) >= 0.0000001, "<" => l < r, "<=" => l <= r, ">" => l > r, ">=" => l >= r, _ => false };
-    }
-
-    private static bool ValuesEqual(object? left, object? right) =>
-        left is string || right is string
-            ? string.Equals(Convert.ToString(left, CultureInfo.InvariantCulture), Convert.ToString(right, CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase)
-            : Math.Abs(ToNumber(left) - ToNumber(right)) < 0.0000001;
-
-    private static List<string> SplitLogical(string text, string op)
-    {
-        var parts = new List<string>();
-        var start = 0;
-        var inString = false;
-        for (var index = 0; index < text.Length; index++)
-        {
-            if (text[index] == '"') { inString = !inString; continue; }
-            if (!inString && IsWordAt(text, op, index))
-            {
-                parts.Add(text[start..index].Trim());
-                start = index + op.Length;
-            }
-        }
-        parts.Add(text[start..].Trim());
-        return parts;
-    }
-
-    private static bool IsWordAt(string text, string word, int index)
-    {
-        if (index + word.Length > text.Length || !text.AsSpan(index, word.Length).Equals(word, StringComparison.OrdinalIgnoreCase)) return false;
-        return (index == 0 || !char.IsLetterOrDigit(text[index - 1])) &&
-               (index + word.Length == text.Length || !char.IsLetterOrDigit(text[index + word.Length]));
-    }
-
-    private static double ToNumber(object? value) =>
-        value switch
-        {
-            double number => number,
-            int integer => integer,
-            bool boolean => boolean ? 1 : 0,
-            _ when double.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) => parsed,
-            _ => 0
-        };
-
-    private static bool ToBoolean(object? value) =>
-        value switch
-        {
-            bool boolean => boolean,
-            double number => Math.Abs(number) > 0.0000001,
-            string text when bool.TryParse(text, out var boolean) => boolean,
-            string text when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => Math.Abs(number) > 0.0000001,
-            string text => !string.IsNullOrWhiteSpace(text),
-            _ => value is not null
-        };
-
-    private static object? ParseInput(string input)
-    {
-        input = input.Trim();
-        if (double.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out var invariantNumber)) return invariantNumber;
-        if (double.TryParse(input, NumberStyles.Float, CultureInfo.CurrentCulture, out var currentNumber)) return currentNumber;
-        if (bool.TryParse(input, out var boolean)) return boolean;
-        return input;
-    }
-
-    private static IReadOnlyList<string> SplitArguments(string text)
-    {
-        var parts = new List<string>();
-        var start = 0;
-        var inString = false;
-        for (var index = 0; index < text.Length; index++)
-        {
-            if (text[index] == '"') inString = !inString;
-            if (!inString && text[index] == ',')
-            {
-                parts.Add(text[start..index].Trim());
-                start = index + 1;
-            }
-        }
-        parts.Add(text[start..].Trim());
-        return parts;
-    }
-
-    private static IReadOnlyList<string> SplitNames(string text) => text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    private static bool StartsWithAny(string text, params string[] prefixes) => prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-    private static bool IsQuoted(string text) => text.Length >= 2 && text[0] == '"' && text[^1] == '"';
-    private static bool IsSwitchCase(string text) => text.EndsWith(':') && !text.Equals("De Otro Modo:", StringComparison.OrdinalIgnoreCase);
-    private static string RemoveComment(string line)
-    {
-        var inString = false;
-        for (var index = 0; index < line.Length - 1; index++)
-        {
-            if (line[index] == '"') inString = !inString;
-            if (!inString && line[index] == '/' && line[index + 1] == '/') return line[..index];
-        }
-        return line;
-    }
-    private static string FormatValue(object? value) => value switch
-    {
-        null => string.Empty,
-        double number when Math.Abs(number % 1) < 0.0000001 => number.ToString("0", CultureInfo.InvariantCulture),
-        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
-        _ => value.ToString() ?? string.Empty
-    };
-
-    private sealed record SourceLine(int Number, string Text);
-    private abstract record Node(int Line);
-    private sealed record NoOp(int Line) : Node(Line);
-    private sealed record Declare(int Line, IReadOnlyList<string> Names) : Node(Line);
-    private sealed record Assign(int Line, string Name, string Expression) : Node(Line);
-    private sealed record Write(int Line, IReadOnlyList<string> Expressions) : Node(Line);
-    private sealed record Read(int Line, IReadOnlyList<string> Names) : Node(Line);
-    private sealed record If(int Line, string Condition, IReadOnlyList<Node> ThenBody, IReadOnlyList<Node> ElseBody) : Node(Line);
-    private sealed record While(int Line, string Condition, IReadOnlyList<Node> Body) : Node(Line);
-    private sealed record For(int Line, string Variable, string Start, string End, IReadOnlyList<Node> Body) : Node(Line);
-    private sealed record Switch(int Line, string Expression, IReadOnlyList<SwitchCase> Cases, IReadOnlyList<Node> DefaultBody) : Node(Line);
-    private sealed record SwitchCase(int Line, IReadOnlyList<string> Values, IReadOnlyList<Node> Body);
-}
-
-internal static class PseudoSyntaxValidator
-{
-    private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
-    private static readonly HashSet<string> Types = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"
-    };
-
-    public static IReadOnlyList<string> Validate(string source)
-    {
-        var diagnostics = new List<string>();
-        var blocks = new Stack<(string Name, int Line)>();
-        var lines = source.Replace("\r\n", "\n").Split('\n');
-
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var lineNumber = index + 1;
-            var line = RemoveComment(lines[index]).Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            ValidateLine(line, lineNumber, diagnostics, blocks);
-        }
-
-        while (blocks.TryPop(out var block))
-        {
-            diagnostics.Add($"Linea {block.Line}: falta cerrar '{block.Name}'. Causa: el bloque quedo abierto. Solucion: agrega su cierre correspondiente.");
-        }
-
-        return diagnostics;
-    }
-
-    private static void ValidateLine(string line, int lineNumber, List<string> diagnostics, Stack<(string Name, int Line)> blocks)
-    {
-        if (line.Count(character => character == '"') % 2 != 0)
-        {
-            diagnostics.Add($"Linea {lineNumber}: comillas sin cerrar. Causa: falta una comilla doble. Solucion: cierra el texto con \".");
-            return;
-        }
-
-        if (line.Equals("Algoritmo", StringComparison.OrdinalIgnoreCase) ||
-            line.Equals("Proceso", StringComparison.OrdinalIgnoreCase) ||
-            StartsWithAny(line, "Algoritmo ", "Proceso "))
-        {
-            blocks.Push((line.StartsWith("Proceso ", StringComparison.OrdinalIgnoreCase) ? "Proceso" : "Algoritmo", lineNumber));
-            return;
-        }
-
-        if (line.Equals("FinAlgoritmo", StringComparison.OrdinalIgnoreCase) || line.Equals("FinProceso", StringComparison.OrdinalIgnoreCase))
-        {
-            CloseBlock(lineNumber, line.StartsWith("FinProceso", StringComparison.OrdinalIgnoreCase) ? "Proceso" : "Algoritmo", diagnostics, blocks);
-            return;
-        }
-
-        if (line.StartsWith("Definir ", StringComparison.OrdinalIgnoreCase))
-        {
-            ValidateDeclaration(line["Definir ".Length..], lineNumber, diagnostics);
-            return;
-        }
-
-        if (line.StartsWith("Escribir ", StringComparison.OrdinalIgnoreCase))
-        {
-            ValidateExpression(line["Escribir ".Length..], lineNumber, "Escribir", diagnostics);
-            return;
-        }
-
-        if (line.StartsWith("Leer ", StringComparison.OrdinalIgnoreCase))
-        {
-            ValidateIdentifierList(line["Leer ".Length..], lineNumber, "Leer", diagnostics);
-            return;
-        }
-
-        if (Regex.IsMatch(line, @"^Si\s+.+\s+Entonces$", RegexOptions.IgnoreCase))
-        {
-            blocks.Push(("Si", lineNumber));
-            return;
-        }
-
-        if (line.Equals("Sino", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!blocks.Any(block => block.Name.Equals("Si", StringComparison.OrdinalIgnoreCase)))
-            {
-                diagnostics.Add($"Linea {lineNumber}: 'Sino' no corresponde a ningun 'Si'. Causa: falta abrir un bloque Si. Solucion: usa 'Si condicion Entonces' antes de 'Sino'.");
-            }
-            return;
-        }
-
-        if (line.Equals("FinSi", StringComparison.OrdinalIgnoreCase))
-        {
-            CloseBlock(lineNumber, "Si", diagnostics, blocks);
-            return;
-        }
-
-        if (Regex.IsMatch(line, @"^Mientras\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
-        {
-            blocks.Push(("Mientras", lineNumber));
-            return;
-        }
-
-        if (line.Equals("FinMientras", StringComparison.OrdinalIgnoreCase))
-        {
-            CloseBlock(lineNumber, "Mientras", diagnostics, blocks);
-            return;
-        }
-
-        if (Regex.IsMatch(line, @"^Para\s+[A-Za-z_][A-Za-z0-9_]*\s*<-\s*.+\s+Hasta\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
-        {
-            blocks.Push(("Para", lineNumber));
-            return;
-        }
-
-        if (line.Equals("FinPara", StringComparison.OrdinalIgnoreCase))
-        {
-            CloseBlock(lineNumber, "Para", diagnostics, blocks);
-            return;
-        }
-
-        if (Regex.IsMatch(line, @"^Segun\s+.+\s+Hacer$", RegexOptions.IgnoreCase))
-        {
-            blocks.Push(("Segun", lineNumber));
-            return;
-        }
-
-        if (line.Equals("FinSegun", StringComparison.OrdinalIgnoreCase))
-        {
-            CloseBlock(lineNumber, "Segun", diagnostics, blocks);
-            return;
-        }
-
-        if (Regex.IsMatch(line, @"^.+:\s*$"))
-        {
-            return;
-        }
-
-        var assignmentIndex = line.IndexOf("<-", StringComparison.Ordinal);
-        if (assignmentIndex > 0)
-        {
-            ValidateAssignment(line, assignmentIndex, lineNumber, diagnostics);
-            return;
-        }
-
-        diagnostics.Add($"Linea {lineNumber}: instruccion desconocida. Causa: '{line}' no coincide con el pseudocodigo soportado. Solucion: revisa la palabra clave o consulta la ayuda.");
-    }
-
-    private static void ValidateDeclaration(string declaration, int lineNumber, List<string> diagnostics)
-    {
-        var separator = declaration.IndexOf(" Como ", StringComparison.OrdinalIgnoreCase);
-        var names = separator >= 0 ? declaration[..separator] : declaration;
-        ValidateIdentifierList(names, lineNumber, "Definir", diagnostics);
-
-        if (separator >= 0)
-        {
-            var typeName = declaration[(separator + " Como ".Length)..].Trim();
-            if (typeName.Length == 0 || !Types.Contains(typeName))
-            {
-                diagnostics.Add($"Linea {lineNumber}: tipo '{typeName}' no reconocido. Causa: el tipo esta vacio o no existe. Solucion: usa Entero, Real, Cadena o Logico.");
-            }
-        }
-    }
-
-    private static void ValidateIdentifierList(string text, int lineNumber, string instruction, List<string> diagnostics)
-    {
-        var names = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (names.Length == 0)
-        {
-            diagnostics.Add($"Linea {lineNumber}: '{instruction}' necesita al menos una variable. Causa: la lista esta vacia. Solucion: agrega un nombre valido.");
-            return;
-        }
-
-        foreach (var name in names)
-        {
-            if (!Identifier.IsMatch(name))
-            {
-                diagnostics.Add($"Linea {lineNumber}: '{name}' no es un nombre de variable valido. Causa: usa caracteres no permitidos o inicia con numero. Solucion: usa letras, numeros y guion bajo, empezando con letra.");
-            }
-        }
-    }
-
-    private static void ValidateExpression(string text, int lineNumber, string instruction, List<string> diagnostics)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            diagnostics.Add($"Linea {lineNumber}: '{instruction}' necesita una expresion. Causa: no hay nada para procesar. Solucion: agrega texto, variable o expresion.");
-        }
-    }
-
-    private static void ValidateAssignment(string line, int assignmentIndex, int lineNumber, List<string> diagnostics)
-    {
-        var name = line[..assignmentIndex].Trim();
-        var expression = line[(assignmentIndex + 2)..].Trim();
-        if (!Identifier.IsMatch(name))
-        {
-            diagnostics.Add($"Linea {lineNumber}: '{name}' no es un destino de asignacion valido. Causa: el lado izquierdo debe ser una variable. Solucion: usa algo como 'total <- 10'.");
-        }
-
-        if (expression.Length == 0)
-        {
-            diagnostics.Add($"Linea {lineNumber}: asignacion incompleta. Causa: falta la expresion despues de '<-'. Solucion: agrega un valor o calculo.");
-        }
-    }
-
-    private static void CloseBlock(int lineNumber, string expected, List<string> diagnostics, Stack<(string Name, int Line)> blocks)
-    {
-        if (!blocks.TryPop(out var opened))
-        {
-            diagnostics.Add($"Linea {lineNumber}: cierre '{expected}' sin bloque abierto. Causa: sobra un cierre. Solucion: elimina este cierre o agrega el bloque inicial.");
-            return;
-        }
-
-        if (!opened.Name.Equals(expected, StringComparison.OrdinalIgnoreCase))
-        {
-            diagnostics.Add($"Linea {lineNumber}: cierre incorrecto. Causa: se esperaba cerrar '{opened.Name}', pero aparece '{expected}'. Solucion: cambia el cierre o revisa el orden de los bloques.");
-        }
-    }
-
-    private static bool StartsWithAny(string text, params string[] prefixes) =>
-        prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-
-    private static string RemoveComment(string line)
-    {
-        var inString = false;
-        for (var index = 0; index < line.Length - 1; index++)
-        {
-            if (line[index] == '"')
-            {
-                inString = !inString;
-            }
-
-            if (!inString && line[index] == '/' && line[index + 1] == '/')
-            {
-                return line[..index];
-            }
-        }
-
-        return line;
-    }
-}
-
-internal sealed class PseudoCompletionData(CommandInfo item) : ICompletionData
-{
-    public IImage? Image => null;
-
-    public string Text => item.Text;
-
-    public object Content => item.Text;
-
-    public object Description => item.Description;
-
-    public double Priority => item.IsTemplate ? 1 : 0;
-
-    public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
-    {
-        textArea.Document.Replace(completionSegment, item.InsertText);
-    }
-}
-
-internal sealed record PseudoCodeColorPalette(
-    IBrush KeywordBrush,
-    IBrush TypeBrush,
-    IBrush StringBrush,
-    IBrush NumberBrush,
-    IBrush OperatorBrush,
-    IBrush CommentBrush,
-    IBrush BlockBrush);
-
-internal sealed class DiagnosticUnderlineRenderer : IBackgroundRenderer
-{
-    private readonly Pen _pen = new(Brushes.Red, 1.5);
-    private HashSet<int> _lineNumbers = [];
-
-    public KnownLayer Layer => KnownLayer.Text;
-
-    public void SetLines(IEnumerable<int> lineNumbers)
-    {
-        _lineNumbers = lineNumbers.Where(lineNumber => lineNumber > 0).ToHashSet();
-    }
-
-    public void Draw(TextView textView, DrawingContext drawingContext)
-    {
-        if (_lineNumbers.Count == 0 || textView.Document is null)
-        {
-            return;
-        }
-
-        textView.EnsureVisualLines();
-        foreach (var lineNumber in _lineNumbers)
-        {
-            if (lineNumber > textView.Document.LineCount)
-            {
-                continue;
-            }
-
-            var line = textView.Document.GetLineByNumber(lineNumber);
-            var length = Math.Max(1, line.Length);
-            var segment = new TextSegment
-            {
-                StartOffset = line.Offset,
-                Length = length
-            };
-
-            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment, false))
-            {
-                var y = Math.Max(rect.Top, rect.Bottom - 2);
-                drawingContext.DrawLine(_pen, new Point(rect.Left, y), new Point(rect.Right, y));
-            }
-        }
-    }
-}
-
-internal sealed class PseudoCodeColorizer(PseudoCodeColorPalette palette) : DocumentColorizingTransformer
-{
-    private static readonly Regex StringLiteral = new("\"[^\"]*\"", RegexOptions.Compiled);
-    private static readonly Regex NumberLiteral = new(@"\b\d+(\.\d+)?\b", RegexOptions.Compiled);
-    private static readonly Regex TypeName = new(@"\b(Entero|Real|Cadena|Logico|Caracter)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex Operator = new(@"(<-|<=|>=|<>|=|<|>|\+|-|\*|/|%)", RegexOptions.Compiled);
-    private static readonly Regex Keyword = new(@"\b(Algoritmo|Proceso|FinAlgoritmo|FinProceso|Definir|Como|Escribir|Leer|Si|Entonces|Sino|FinSi|Mientras|Hacer|FinMientras|Para|Hasta|Con|Paso|FinPara|Segun|FinSegun|Verdadero|Falso|Y|O|NO)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex BlockLine = new(@"^\s*(Algoritmo|Proceso|Si|Sino|FinSi|Mientras|FinMientras|Para|FinPara|Segun|FinSegun|FinAlgoritmo|FinProceso)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    public static readonly PseudoCodeColorPalette DarkPalette = new(
-        Brush("#5EA1FF"),
-        Brush("#4EC9B0"),
-        Brush("#CE9178"),
-        Brush("#B5CEA8"),
-        Brush("#DCDCAA"),
-        Brush("#6A9955"),
-        Brush("#1F3B4D"));
-
-    public static readonly PseudoCodeColorPalette LightPalette = new(
-        Brush("#0645AD"),
-        Brush("#00796B"),
-        Brush("#A31515"),
-        Brush("#098658"),
-        Brush("#795E26"),
-        Brush("#008000"),
-        Brush("#EAF3FF"));
-
-    private PseudoCodeColorPalette _palette = palette;
-
-    public void SetPalette(PseudoCodeColorPalette newPalette)
-    {
-        _palette = newPalette;
-    }
-
-    protected override void ColorizeLine(DocumentLine line)
-    {
-        var text = CurrentContext.Document.GetText(line);
-
-        if (BlockLine.IsMatch(text))
-        {
-            ChangeLinePart(line.Offset, line.EndOffset, element =>
-            {
-                element.TextRunProperties.SetBackgroundBrush(_palette.BlockBrush);
-            });
-        }
-
-        var commentIndex = FindCommentIndex(text);
-        var codeLength = commentIndex >= 0 ? commentIndex : text.Length;
-
-        ApplyMatches(line, text, Keyword, _palette.KeywordBrush, codeLength);
-        ApplyMatches(line, text, TypeName, _palette.TypeBrush, codeLength);
-        ApplyMatches(line, text, StringLiteral, _palette.StringBrush, codeLength);
-        ApplyMatches(line, text, NumberLiteral, _palette.NumberBrush, codeLength);
-        ApplyMatches(line, text, Operator, _palette.OperatorBrush, codeLength);
-
-        if (commentIndex >= 0)
-        {
-            ChangeLinePart(line.Offset + commentIndex, line.EndOffset, element =>
-            {
-                element.TextRunProperties.SetForegroundBrush(_palette.CommentBrush);
-            });
-        }
-    }
-
-    private void ApplyMatches(DocumentLine line, string text, Regex regex, IBrush brush, int codeLength)
-    {
-        foreach (Match match in regex.Matches(text[..codeLength]))
-        {
-            ChangeLinePart(line.Offset + match.Index, line.Offset + match.Index + match.Length, element =>
-            {
-                element.TextRunProperties.SetForegroundBrush(brush);
-            });
-        }
-    }
-
-    private static int FindCommentIndex(string text)
-    {
-        var inString = false;
-        for (var index = 0; index < text.Length - 1; index++)
-        {
-            if (text[index] == '"')
-            {
-                inString = !inString;
-            }
-
-            if (!inString && text[index] == '/' && text[index + 1] == '/')
-            {
-                return index;
-            }
-        }
-
-        return -1;
-    }
-
-    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
 }

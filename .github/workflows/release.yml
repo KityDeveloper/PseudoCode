@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v1.0.0"
-        required: true
+        description: "Release tag, for example v2.0.3-beta.1. Leave empty to use the project version."
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -44,6 +45,12 @@ jobs:
         shell: bash
         run: |
           tag="${{ github.event.inputs.tag }}"
+          if [[ -z "$tag" ]]; then
+            version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/PseudoCode.App/PseudoCode.App.csproj | head -n 1)"
+            tag="v$version"
+          elif [[ "$tag" != v* ]]; then
+            tag="v$tag"
+          fi
           version="${tag#v}"
 
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
@@ -180,7 +187,22 @@ jobs:
         shell: bash
         run: |
           tag="${{ github.event.inputs.tag }}"
+          if [[ -z "$tag" ]]; then
+            version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/PseudoCode.App/PseudoCode.App.csproj | head -n 1)"
+            tag="v$version"
+          elif [[ "$tag" != v* ]]; then
+            tag="v$tag"
+            version="${tag#v}"
+          else
+            version="${tag#v}"
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ -(alpha|beta|rc)(\.|$) ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download packages
         uses: actions/download-artifact@v8
@@ -198,14 +220,54 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists."
           else
-            git tag -a "$TAG" -m "Release $TAG"
+            git tag -a "$TAG" -m "PseudoCode $TAG" -m "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol." -m "Autor: Kity Dev"
             git push origin "$TAG"
           fi
+
+      - name: Build release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          {
+            echo "# PseudoCode $TAG"
+            echo
+            echo "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol."
+            echo
+            echo "Autor: Kity Dev"
+            echo
+            if [[ "$VERSION" == *"-"* ]]; then
+              echo "> Esta version es beta/prerelease."
+              echo
+            fi
+            echo "## Cambios de esta version"
+            awk -v version="$VERSION" '
+              $0 == "## " version { found = 1; next }
+              found && /^## / { exit }
+              found { print }
+            ' CHANGELOG.md
+            echo
+            echo "## Descargas"
+            echo
+            echo "- Windows: paquete .zip"
+            echo "- Linux portable: paquete .tar.gz"
+            echo "- Debian/Ubuntu: paquete .deb"
+            echo "- Fedora/Bazzite: paquete .rpm"
+            echo
+            echo "## Documentacion"
+            echo
+            echo "- README: https://github.com/$GITHUB_REPOSITORY"
+            echo "- Releases: https://github.com/$GITHUB_REPOSITORY/releases"
+            echo
+            echo "Nota: algunos builds beta pueden no estar firmados todavia y el sistema operativo podria mostrar una advertencia."
+          } > release-notes.md
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         shell: bash
         run: |
           files=()
@@ -213,7 +275,13 @@ jobs:
             files+=("$file")
           done < <(find dist -type f | sort)
 
+          prerelease_args=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+
           gh release create "$TAG" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "PseudoCode $TAG" \
-            --generate-notes
+            --notes-file release-notes.md \
+            "${prerelease_args[@]}"

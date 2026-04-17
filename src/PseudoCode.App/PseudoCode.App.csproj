@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <Version>2.0.3-beta.1</Version>
+    <AssemblyVersion>2.0.3.0</AssemblyVersion>
+    <FileVersion>2.0.3.0</FileVersion>
+    <InformationalVersion>2.0.3-beta.1</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,5 +24,9 @@
   <ItemGroup>
     <AvaloniaResource Include="../../resources/images/logoPseudoCode.png" Link="Assets/logoPseudoCode.png" />
     <AvaloniaResource Include="../../resources/images/iconKityDev.png" Link="Assets/iconKityDev.png" />
+    <AvaloniaResource Include="../../docs/ayuda.md" Link="Docs/ayuda.md" />
+    <AvaloniaResource Include="../../docs/configuracion-json.md" Link="Docs/configuracion-json.md" />
+    <AvaloniaResource Include="../../CHANGELOG.md" Link="Docs/CHANGELOG.md" />
+    <Content Include="settings/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

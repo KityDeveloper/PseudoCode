@@ -1,0 +1,9 @@
+{
+  "language": {
+    "activeDialect": "pseint"
+  },
+  "editor": {
+    "syntaxThemeDark": "dark",
+    "syntaxThemeLight": "light"
+  }
+}

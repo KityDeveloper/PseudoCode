@@ -1,121 +1,127 @@
 # PseudoCode
 
-PseudoCode es una app educativa de pseudocodigo en español hecha con .NET y Avalonia. La primera version apunta a una experiencia parecida a VS Code: editor central, barra lateral, panel de salida, ayuda rapida y ejecucion de algoritmos simples.
+> Editor educativo para escribir, ejecutar y aprender pseudocodigo en espanol.
 
-## Requisitos
+[![Version](https://img.shields.io/badge/version-2.0.3--beta.1-blue)](CHANGELOG.md)
+[![Estado](https://img.shields.io/badge/estado-beta-orange)](CHANGELOG.md)
+[![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-lightgrey)](#descargas)
+[![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
 
-- .NET SDK 8
-- Linux, Windows o macOS para desarrollo
+PseudoCode es una app de escritorio para practicar logica de programacion con pseudocodigo en espanol. Esta pensada para estudiantes, profesores y personas que quieren probar algoritmos sin configurar un lenguaje de programacion completo.
 
+El dialecto principal sigue el estilo de **PSeInt**, con editor moderno, multiples archivos, diagnosticos, salida, variables, ayuda integrada y configuracion por JSON.
 
-## Ejecutar
+## Descargas rapidas
 
-```bash
-dotnet run --project src/PseudoCode.App
-```
+- [Descargar ultima version](https://github.com/KityDeveloper/PseudoCode/releases/latest)
+- [Ver todos los releases](https://github.com/KityDeveloper/PseudoCode/releases)
+- [Notas de version](CHANGELOG.md)
+- [Documentacion](docs/ayuda.md)
 
-### Si ejecutas en un contenedor (Dev Container)
+## Capturas
 
-Para mostrar la interfaz gráfica de Avalonia en tu sistema anfitrión desde el contenedor:
+> Placeholder: editor principal
 
-1. En tu máquina anfitriona, permite conexiones locales a X11:
-	```bash
-	xhost +local:
-	```
-2. Dentro del contenedor, exporta la variable DISPLAY:
-	```bash
-	export DISPLAY=:0
-	```
-	(Si usas otra configuración, ajusta el valor de DISPLAY según corresponda.)
-3. Ejecuta la app normalmente:
-	```bash
-	dotnet run --project src/PseudoCode.App
-	```
+![Editor principal](docs/assets/screenshots/editor-principal.png)
 
-Esto permitirá que la ventana de la app Avalonia se muestre en tu escritorio local.
+> Placeholder: ejecucion, salida y variables
 
-## Dev containers
+![Ejecucion, salida y variables](docs/assets/screenshots/ejecucion-salida-variables.png)
 
-El proyecto incluye dos perfiles:
+> Placeholder: ayuda integrada
 
-- `PseudoCode Avalonia`: entorno .NET 8 normal.
-- `PseudoCode Avalonia - Bazzite`: entorno para Bazzite/Flatpak con montajes de X11/Wayland para probar la app Avalonia desde el contenedor.
+![Ayuda integrada](docs/assets/screenshots/ayuda-integrada.png)
 
-## Publicar
+> Placeholder: documentacion Markdown dentro de la app
 
-### Release automatico con aprobacion
+![Documentacion integrada](docs/assets/screenshots/documentacion-integrada.png)
 
-El workflow `Release` de GitHub Actions se ejecuta manualmente desde la pestana **Actions**. Pide un tag como `v1.0.0`, compila Windows y Linux, espera aprobacion en el environment `release`, y despues crea el tag y el GitHub Release con los paquetes:
+> Placeholder: configuracion de dialectos
 
-- `PseudoCode-linux-x64-vX.Y.Z.tar.gz`
-- `pseudocode_X.Y.Z_amd64.deb`
-- `pseudocode-X.Y.Z.x86_64.rpm`
-- `PseudoCode-win-x64-vX.Y.Z.zip`
+![Configuracion de dialectos](docs/assets/screenshots/configuracion-dialectos.png)
 
-Para que GitHub pida aprobacion antes de publicar, configura el environment en el repositorio:
+## Indice
 
-1. Ve a **Settings > Environments**.
-2. Crea un environment llamado `release`.
-3. Activa **Required reviewers** y agregate como reviewer.
+- [Para que sirve](#para-que-sirve)
+- [Funciones principales](#funciones-principales)
+- [Descargas](#descargas)
+- [Configuracion JSON](#configuracion-json)
+- [Documentacion](#documentacion)
+- [Estado del proyecto](#estado-del-proyecto)
+- [Autor](#autor)
 
-Usa tags SemVer validos:
+## Para que sirve
 
-```text
-v1.0.0
-v1.0.0-beta.1
-v1.0.0-alpha.1
-```
+PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se aprende programacion. Puede usarse para:
 
-Instalar en Debian/Ubuntu:
+- Practicar estructuras como `Si`, `Mientras`, `Para` y `Segun`.
+- Ver salida y variables mientras se ejecuta un algoritmo.
+- Preparar ejemplos para clase.
+- Probar ejercicios sin instalar compiladores grandes.
+- Experimentar con dialectos de pseudocodigo configurables.
 
-```bash
-sudo apt install ./pseudocode_X.Y.Z_amd64.deb
-pseudocode
-```
+## Funciones principales
 
-Instalar en Fedora:
+- Editor de pseudocodigo en espanol.
+- Dialecto principal estilo PSeInt.
+- Ejecucion de algoritmos con salida y variables.
+- Diagnosticos y errores subrayados en rojo.
+- Tabs con multiples archivos.
+- Paneles redimensionables.
+- Lista de archivos abiertos.
+- Ayuda rapida integrada.
+- Documentacion Markdown renderizada dentro de la app.
+- Dialectos JSON reemplazables.
+- Colores de sintaxis configurables.
+- Modo claro y modo oscuro.
 
-```bash
-sudo dnf install ./pseudocode-X.Y.Z.x86_64.rpm
-pseudocode
-```
+## Descargas
 
-En Bazzite puedes probar la app sin instalar usando el paquete portable:
+Los paquetes se publican en [GitHub Releases](https://github.com/KityDeveloper/PseudoCode/releases).
 
-```bash
-tar -xzf PseudoCode-linux-x64-vX.Y.Z.tar.gz
-./PseudoCode-linux-x64/PseudoCode.App
-```
+| Plataforma | Paquete | Uso |
+| --- | --- | --- |
+| Windows | `.zip` | Portable |
+| Linux | `.tar.gz` | Portable |
+| Debian/Ubuntu | `.deb` | Instalacion con `apt` |
+| Fedora/Bazzite | `.rpm` | Instalacion con `dnf` o rpm-ostree |
+| macOS | Planeado | Pendiente |
 
-Si quieres instalar el `.rpm` en Bazzite, usa una capa de `rpm-ostree` y reinicia:
+> Nota: algunos builds beta pueden no estar firmados todavia. En Windows o macOS puede aparecer una advertencia del sistema operativo.
 
-```bash
-sudo rpm-ostree install ./pseudocode-X.Y.Z.x86_64.rpm
-systemctl reboot
-```
+## Configuracion JSON
 
-En Bazzite/Atomic Desktop, Flatpak es la ruta recomendada para apps graficas distribuidas a largo plazo. El `.tar.gz` sirve muy bien para pruebas y el `.rpm` sirve si aceptas usar paquetes layered.
+PseudoCode puede reemplazar el lenguaje activo mediante JSON. No usa aliases dentro del mismo dialecto: si cambias `Escribir` por `Mostrar`, entonces `Escribir` deja de ser valido en ese dialecto.
 
-Linux x64:
+Tambien puedes cambiar los colores de sintaxis del editor con JSON. El tema principal por defecto es `dark`.
 
-```bash
-dotnet publish src/PseudoCode.App -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/linux-x64
-```
+Lee la guia completa en [Configuracion JSON](docs/configuracion-json.md).
 
-Windows x64:
+## Documentacion
 
-```bash
-dotnet publish src/PseudoCode.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/win-x64
-```
+- [Ayuda general](docs/ayuda.md)
+- [Configuracion JSON](docs/configuracion-json.md)
+- [Pseudolenguaje](docs/pseudolenguaje.md)
+- [Desarrollo](docs/desarrollo.md)
+- [Publicacion](docs/publicacion.md)
+- [Notas de version](CHANGELOG.md)
 
-## Pseudolenguaje inicial
+La app tambien puede abrir estos documentos desde el menu **Ayuda**.
 
-La ejecucion actual soporta una base didactica:
+## Estado del proyecto
 
-- `Algoritmo`, `Proceso`, `FinAlgoritmo`, `FinProceso`
-- `Definir nombre Como Entero`
-- Asignaciones con `<-`
-- `Escribir "texto", variable, 2 + 2`
-- `Leer variable` con entrada simulada
+Version actual: **2.0.3-beta.1**
 
-El objetivo es crecer hacia un entorno estilo PSeInt con diagramas de flujo, validaciones, trazas paso a paso y mas estructuras del lenguaje.
+PseudoCode esta en beta. La base ya permite editar, abrir varios archivos, ejecutar pseudocodigo y configurar dialectos/colores, pero todavia hay trabajo planeado para depuracion paso a paso, tabla de prueba de escritorio y empaquetado mas pulido.
+
+## Autor
+
+Creado por **Kity Dev**.
+
+- YouTube: [@KityDev](https://www.youtube.com/@KityDev)
+- GitHub: [KityDeveloper](https://github.com/KityDeveloper)
+- Web: [kity.dev](https://kity.dev)
+
+## Licencia
+
+Consulta la licencia del repositorio. Si agregas una licencia nueva, enlazala aqui.

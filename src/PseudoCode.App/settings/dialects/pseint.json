@@ -1,0 +1,84 @@
+{
+  "id": "pseint",
+  "displayName": "PSeInt",
+  "keywords": {
+    "algorithmStart": "Algoritmo",
+    "algorithmEnd": "FinAlgoritmo",
+    "processStart": "Proceso",
+    "processEnd": "FinProceso",
+    "declare": "Definir",
+    "typeSeparator": "Como",
+    "write": "Escribir",
+    "read": "Leer",
+    "if": "Si",
+    "then": "Entonces",
+    "else": "Sino",
+    "endIf": "FinSi",
+    "while": "Mientras",
+    "do": "Hacer",
+    "endWhile": "FinMientras",
+    "for": "Para",
+    "until": "Hasta",
+    "step": "Paso",
+    "endFor": "FinPara",
+    "switch": "Segun",
+    "otherwise": "De Otro Modo",
+    "endSwitch": "FinSegun",
+    "true": "Verdadero",
+    "false": "Falso",
+    "and": "Y",
+    "or": "O",
+    "not": "NO"
+  },
+  "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
+  "snippets": [
+    {
+      "text": "Algoritmo",
+      "insertText": "Algoritmo MiPrograma\n    \nFinAlgoritmo",
+      "description": "Define el inicio y fin de un algoritmo.",
+      "isTemplate": true
+    },
+    {
+      "text": "Definir",
+      "insertText": "Definir variable Como Entero",
+      "description": "Declara una o varias variables.",
+      "isTemplate": true
+    },
+    {
+      "text": "Escribir",
+      "insertText": "Escribir \"Mensaje\", variable",
+      "description": "Muestra texto o valores en la salida.",
+      "isTemplate": true
+    },
+    {
+      "text": "Leer",
+      "insertText": "Leer variable",
+      "description": "Espera un valor antes de continuar.",
+      "isTemplate": true
+    },
+    {
+      "text": "Si",
+      "insertText": "Si condicion Entonces\n    \nFinSi",
+      "description": "Bloque condicional.",
+      "isTemplate": true
+    },
+    {
+      "text": "Mientras",
+      "insertText": "Mientras condicion Hacer\n    \nFinMientras",
+      "description": "Repite mientras se cumpla una condicion.",
+      "isTemplate": true
+    },
+    {
+      "text": "Para",
+      "insertText": "Para i <- 1 Hasta 10 Hacer\n    \nFinPara",
+      "description": "Repite con contador.",
+      "isTemplate": true
+    },
+    {
+      "text": "Segun",
+      "insertText": "Segun opcion Hacer\n    1:\n        \nFinSegun",
+      "description": "Seleccion multiple.",
+      "isTemplate": true
+    }
+  ]
+}
