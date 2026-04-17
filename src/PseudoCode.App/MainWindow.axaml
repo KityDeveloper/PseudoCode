@@ -401,11 +401,6 @@
                        FontWeight="SemiBold"
                        Margin="0,8,0,0" />
             <ItemsControl x:Name="OperatorsList" />
-            <TextBlock Text="Variables detectadas"
-                       Foreground="{StaticResource TextPrimary}"
-                       FontWeight="SemiBold"
-                       Margin="0,8,0,0" />
-            <ItemsControl x:Name="VariablesList" />
           </StackPanel>
         </ScrollViewer>
 

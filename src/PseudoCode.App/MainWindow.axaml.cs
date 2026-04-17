@@ -156,6 +156,12 @@ public partial class MainWindow : Window
         var result = document.Interpreter.Start(document.Text);
         document.LastExecutionResult = result;
         ShowExecutionResult(result);
+        if (result.Diagnostics.Count > 0)
+        {
+            _showDiagnostics = true;
+            UpdateOutputPanelView();
+            UpdateWindowState("No se ejecuto: hay errores");
+        }
     }
 
     private void StartDebug_Click(object? sender, RoutedEventArgs e)
@@ -490,7 +496,7 @@ public partial class MainWindow : Window
 
             visualThemeEditor.Children.Add(new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("150,118,34,Auto"),
+                ColumnDefinitions = new ColumnDefinitions("160,118,34,72"),
                 ColumnSpacing = 10,
                 Children =
                 {
@@ -919,7 +925,12 @@ public partial class MainWindow : Window
             Background = Brush("PanelBackground"),
             BorderBrush = Brush("BorderBrushMuted"),
             BorderThickness = new Thickness(1, 0, 0, 0),
-            Child = new ScrollViewer { Content = visualEditorHost }
+            Child = new ScrollViewer
+            {
+                Content = visualEditorHost,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+            }
         };
         Grid.SetColumn(visualThemePanel, 2);
         Grid.SetRow(visualThemePanel, 1);
@@ -961,15 +972,15 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Title = title,
-            Width = 1120,
+            Width = 1220,
             Height = 720,
-            MinWidth = 940,
+            MinWidth = 1040,
             MinHeight = 520,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Brush("EditorBackground"),
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("230,*,390"),
+                ColumnDefinitions = new ColumnDefinitions("230,*,480"),
                 RowDefinitions = new RowDefinitions("Auto,*,Auto"),
                 Children =
                 {
@@ -1470,7 +1481,6 @@ public partial class MainWindow : Window
             UpdateLiveSyntaxDiagnostics(_currentDocument);
         }
 
-        UpdateVariablesList();
         UpdateDiagnosticUnderlines();
         RenderOpenDocuments();
         UpdateOutputPanelView();
@@ -1603,7 +1613,6 @@ public partial class MainWindow : Window
         UpdateDiagnosticUnderlines();
         HighlightDebugLine(null);
         UpdateLineNumbers();
-        UpdateVariablesList();
         UpdateOutputPanelView();
         RenderOpenDocuments();
         UpdateWindowState("Editando");
@@ -1991,7 +2000,18 @@ public partial class MainWindow : Window
         }
 
         document.IsDebugging = true;
-        ApplyDebugStepResult(document, document.Interpreter.StartDebug(document.Text));
+        var step = document.Interpreter.StartDebug(document.Text);
+        ApplyDebugStepResult(document, step);
+        if (step.Execution.Diagnostics.Count > 0)
+        {
+            document.IsDebugging = false;
+            _showDiagnostics = true;
+            HighlightDebugLine(null);
+            UpdateOutputPanelView();
+            UpdateWindowState("No se inicio depuracion: hay errores");
+            return;
+        }
+
         UpdateWindowState("Depuracion iniciada - F10 para avanzar");
     }
 
@@ -2399,7 +2419,6 @@ public partial class MainWindow : Window
         }
 
         UpdateLineNumbers();
-        UpdateVariablesList();
         HighlightDebugLine(document.DebugLine);
         UpdateDiagnosticUnderlines();
         UpdateOutputPanelView();
@@ -2754,7 +2773,6 @@ public partial class MainWindow : Window
             "< <= > >= comparaciones",
             $"{_language.Keyword("and")}, {_language.Keyword("or")}, {_language.Keyword("not")} operadores logicos"
         };
-        UpdateVariablesList();
     }
 
     private void InsertCommandTemplate(string template)
@@ -2762,12 +2780,6 @@ public partial class MainWindow : Window
         InsertAtCaret(template);
         EditorTextBox.Focus();
         UpdateWindowState("Plantilla insertada");
-    }
-
-    private void UpdateVariablesList()
-    {
-        var names = ExtractVariables(EditorTextBox.Text ?? string.Empty).ToArray();
-        VariablesList.ItemsSource = names.Length == 0 ? new[] { "Sin variables todavia" } : names;
     }
 
     private IEnumerable<string> ExtractVariables(string source)
