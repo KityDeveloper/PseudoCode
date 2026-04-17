@@ -1899,21 +1899,10 @@ public partial class MainWindow : Window
                 },
                 BuildAboutLink("YouTube", "@KityDev - https://www.youtube.com/@KityDev", AppInfoService.YouTubeUrl),
                 BuildAboutLink("GitHub", AppInfoService.GitHubUrl, AppInfoService.GitHubUrl),
-                BuildAboutLink("Web", "kity.dev", AppInfoService.WebUrl),
-                new Button
-                {
-                    Content = "Cerrar",
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Margin = new Thickness(0, 12, 0, 0),
-                    Classes = { "command" }
-                }
+                BuildAboutLink("Web", "kity.dev", AppInfoService.WebUrl)
             }
         };
 
-        if (content.Children[^1] is Button closeButton)
-        {
-            closeButton.Click += (_, _) => window.Close();
-        }
         window.Closed += (_, _) =>
         {
             authorTimer.Stop();
