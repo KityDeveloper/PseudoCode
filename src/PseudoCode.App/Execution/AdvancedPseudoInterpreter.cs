@@ -24,16 +24,20 @@ internal sealed class AdvancedPseudoInterpreter
     private int _executionSteps;
     private bool _halted;
     private bool _outputLimitReported;
+    private CancellationToken _cancellationToken;
+    private ManualResetEventSlim? _pauseGate;
 
     public AdvancedPseudoInterpreter(PseudoLanguageDefinition language)
     {
         _language = language;
     }
 
-    public ExecutionResult Start(string source)
+    public ExecutionResult Start(string source, CancellationToken cancellationToken = default, ManualResetEventSlim? pauseGate = null)
     {
         _inputs.Clear();
         ResetExecutionState();
+        _cancellationToken = cancellationToken;
+        _pauseGate = pauseGate;
         _program = Parse(source);
         if (_diagnostics.Count > 0)
         {
@@ -114,6 +118,8 @@ internal sealed class AdvancedPseudoInterpreter
         _halted = false;
         _outputLimitReported = false;
         _inputIndex = 0;
+        _cancellationToken = default;
+        _pauseGate = null;
     }
 
     private IReadOnlyList<Node> Parse(string source)
@@ -313,7 +319,7 @@ internal sealed class AdvancedPseudoInterpreter
 
     private void Execute(Node node)
     {
-        if (_halted)
+        if (_halted || !CheckExecutionControl(node.Line))
         {
             return;
         }
@@ -370,7 +376,7 @@ internal sealed class AdvancedPseudoInterpreter
                 var milliseconds = wait.Unit.Equals("milliseconds", StringComparison.OrdinalIgnoreCase)
                     ? duration
                     : duration * 1000;
-                Thread.Sleep((int)Math.Min(milliseconds, 60000));
+                WaitWithControl(milliseconds, node.Line);
                 return;
             case If conditional:
                 ExecuteBlock(ToBoolean(EvaluateCondition(conditional.Condition, node.Line)) ? conditional.ThenBody : conditional.ElseBody);
@@ -564,6 +570,58 @@ internal sealed class AdvancedPseudoInterpreter
         }
 
         _outputLineOpen = withoutNewline;
+    }
+
+    private bool CheckExecutionControl(int line)
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            StopByCancellation(line);
+            return false;
+        }
+
+        try
+        {
+            _pauseGate?.Wait(_cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            StopByCancellation(line);
+            return false;
+        }
+    }
+
+    private void WaitWithControl(double milliseconds, int line)
+    {
+        var remaining = Math.Min(milliseconds, 60000);
+        while (remaining > 0 && !_halted)
+        {
+            if (!CheckExecutionControl(line))
+            {
+                return;
+            }
+
+            var slice = (int)Math.Min(remaining, 100);
+            if (_cancellationToken.WaitHandle.WaitOne(slice))
+            {
+                StopByCancellation(line);
+                return;
+            }
+
+            remaining -= slice;
+        }
+    }
+
+    private void StopByCancellation(int line)
+    {
+        if (_halted)
+        {
+            return;
+        }
+
+        _halted = true;
+        AddRuntime(line, "ejecucion detenida", "el usuario presiono detener", "vuelve a ejecutar cuando quieras continuar desde el inicio");
     }
 
     private void AddOutput(string text)

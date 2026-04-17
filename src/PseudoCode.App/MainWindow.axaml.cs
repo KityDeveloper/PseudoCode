@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -74,6 +75,9 @@ public partial class MainWindow : Window
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
     private bool _isRunningCode;
+    private bool _isExecutionPaused;
+    private CancellationTokenSource? _executionCancellation;
+    private readonly ManualResetEventSlim _executionPauseGate = new(true);
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
@@ -99,6 +103,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, Editor_Drop);
         UpdateLineNumbers();
         UpdateEmptyWorkspaceState();
+        UpdateExecutionControls();
         UpdateWindowState(_runtimeSettings.Diagnostics.Count == 0
             ? $"Listo - dialecto {_language.DisplayName}"
             : $"Listo con avisos de settings - {_language.DisplayName}");
@@ -165,11 +170,17 @@ public partial class MainWindow : Window
         }
 
         _isRunningCode = true;
+        _isExecutionPaused = false;
+        _executionPauseGate.Set();
+        _executionCancellation?.Dispose();
+        _executionCancellation = new CancellationTokenSource();
+        UpdateExecutionControls();
         UpdateWindowState("Ejecutando...");
         try
         {
             var source = document.Text;
-            var result = await Task.Run(() => document.Interpreter.Start(source));
+            var cancellation = _executionCancellation;
+            var result = await Task.Run(() => document.Interpreter.Start(source, cancellation.Token, _executionPauseGate));
             document.LastExecutionResult = result;
 
             if (_currentDocument == document)
@@ -186,16 +197,69 @@ public partial class MainWindow : Window
         finally
         {
             _isRunningCode = false;
+            _isExecutionPaused = false;
+            _executionPauseGate.Set();
+            _executionCancellation?.Dispose();
+            _executionCancellation = null;
+            UpdateExecutionControls();
         }
+    }
+
+    private void PauseExecution_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!_isRunningCode)
+        {
+            return;
+        }
+
+        _isExecutionPaused = !_isExecutionPaused;
+        if (_isExecutionPaused)
+        {
+            _executionPauseGate.Reset();
+            UpdateWindowState("Ejecucion pausada");
+        }
+        else
+        {
+            _executionPauseGate.Set();
+            UpdateWindowState("Ejecutando...");
+        }
+
+        UpdateExecutionControls();
+    }
+
+    private void StopExecution_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!_isRunningCode)
+        {
+            return;
+        }
+
+        _executionPauseGate.Set();
+        _executionCancellation?.Cancel();
+        _isExecutionPaused = false;
+        UpdateExecutionControls();
+        UpdateWindowState("Deteniendo ejecucion...");
     }
 
     private void StartDebug_Click(object? sender, RoutedEventArgs e)
     {
+        if (_isRunningCode)
+        {
+            UpdateWindowState("Deten la ejecucion antes de depurar");
+            return;
+        }
+
         StartDebugSession();
     }
 
     private void StepDebug_Click(object? sender, RoutedEventArgs e)
     {
+        if (_isRunningCode)
+        {
+            UpdateWindowState("Deten la ejecucion antes de avanzar paso a paso");
+            return;
+        }
+
         StepDebugSession();
     }
 
@@ -2057,6 +2121,7 @@ public partial class MainWindow : Window
         {
             _currentDocument = null;
             ClearEditorWorkspace();
+            UpdateExecutionControls();
             UpdateWindowState($"Cerrado: {document.DisplayName}");
             return;
         }
@@ -2095,6 +2160,7 @@ public partial class MainWindow : Window
         UpdateOutputPanelView();
         UpdateLineNumbers();
         UpdateEmptyWorkspaceState();
+        UpdateExecutionControls();
     }
 
     private async Task<CloseDocumentChoice> AskCloseUnsavedDocumentAsync(OpenDocument document)
@@ -2919,6 +2985,18 @@ public partial class MainWindow : Window
         Title = hasUnsavedChanges ? "PseudoCode *" : "PseudoCode";
     }
 
+    private void UpdateExecutionControls()
+    {
+        RunExecutionButton.IsEnabled = !_isRunningCode && _currentDocument is not null;
+        PauseExecutionButton.IsEnabled = _isRunningCode;
+        StopExecutionButton.IsEnabled = _isRunningCode;
+        TopExecutionControls.IsVisible = _isRunningCode;
+
+        var pauseText = _isExecutionPaused ? "▶ Continuar" : "Ⅱ Pausa";
+        PauseExecutionButton.Content = pauseText;
+        TopPauseExecutionButton.Content = pauseText;
+    }
+
     private void AddNewDocument()
     {
         var document = new OpenDocument($"Nuevo {_newAlgorithmNumber++}.psc", BuildSampleProgram(_language), _language);
@@ -2961,6 +3039,7 @@ public partial class MainWindow : Window
         UpdateOutputPanelView();
         RenderOpenDocuments();
         UpdateEmptyWorkspaceState();
+        UpdateExecutionControls();
         UpdateWindowState($"Activo: {document.DisplayName}");
         EditorTextBox.Focus();
     }
@@ -3135,6 +3214,7 @@ public partial class MainWindow : Window
     private void UpdateEmptyWorkspaceState()
     {
         EmptyWorkspacePanel.IsVisible = _openDocuments.Count == 0;
+        UpdateExecutionControls();
     }
 
     private Control BuildDocumentButton(OpenDocument document, bool isTab)
