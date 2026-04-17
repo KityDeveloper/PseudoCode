@@ -53,7 +53,7 @@ Primera version estable de PseudoCode.
 ### Cambios principales
 
 - Version oficial estable, sin etiqueta beta ni alpha.
-- Editor de pseudocodigo en espanol con dialecto principal estilo PSeInt.
+- Editor de pseudocodigo en español con dialecto principal estilo PSeInt.
 - Ejecucion de algoritmos con salida, variables, entrada interactiva y estructuras `Si/Sino`, `Mientras`, `Para` y `Segun`.
 - Depuracion paso a paso con `F10`, resaltado de la linea actual e inspeccion de variables.
 - Diagnosticos en vivo con subrayado rojo, contador de problemas y salto a la linea del error.
@@ -83,7 +83,7 @@ Primera version estable de PseudoCode.
 
 ### Sobre PseudoCode
 
-PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol con una experiencia inspirada en editores modernos.
+PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en español con una experiencia inspirada en editores modernos.
 
 ### Autor
 

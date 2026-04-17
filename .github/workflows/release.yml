@@ -120,7 +120,7 @@ jobs:
           Architecture: amd64
           Maintainer: Kity Dev <kitydeveloper@gmail.com>
           Description: $display_name editor educativo de pseudocodigo
-           Editor de pseudocodigo en espanol hecho con .NET y Avalonia.
+           Editor de pseudocodigo en español hecho con .NET y Avalonia.
           EOF
           dpkg-deb --build "$deb_root" "dist/${package_name}_${version}_amd64.deb"
 
@@ -140,7 +140,7 @@ jobs:
           BuildArch: x86_64
 
           %description
-          Editor de pseudocodigo en espanol hecho con .NET y Avalonia.
+          Editor de pseudocodigo en español hecho con .NET y Avalonia.
 
           %prep
 
@@ -220,7 +220,7 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists."
           else
-            git tag -a "$TAG" -m "PseudoCode $TAG" -m "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol." -m "Autor: Kity Dev"
+            git tag -a "$TAG" -m "PseudoCode $TAG" -m "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en español." -m "Autor: Kity Dev"
             git push origin "$TAG"
           fi
 
@@ -233,7 +233,7 @@ jobs:
           {
             echo "# PseudoCode $TAG"
             echo
-            echo "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol."
+            echo "PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en español."
             echo
             echo "Autor: Kity Dev"
             echo

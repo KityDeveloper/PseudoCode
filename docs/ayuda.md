@@ -1,6 +1,6 @@
 # Ayuda de PseudoCode
 
-PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en espanol. Esta documentacion vive en el repo como Markdown y tambien se puede abrir renderizada desde el menu **Ayuda** de la app.
+PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo en español. Esta documentacion vive en el repo como Markdown y tambien se puede abrir renderizada desde el menu **Ayuda** de la app.
 
 ## Indice
 
