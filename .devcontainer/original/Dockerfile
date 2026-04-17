@@ -9,6 +9,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         libice6 \
         libsm6 \
         libx11-6 \
+        libxcursor1 \
         libxext6 \
         libxrender1 \
     && rm -rf /var/lib/apt/lists/*

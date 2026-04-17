@@ -16,6 +16,7 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg \
         libice6 \
         libsm6 \
         libx11-6 \
+        libxcursor1 \
         libxext6 \
         libxrender1 \
         nano \

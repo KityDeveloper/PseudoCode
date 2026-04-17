@@ -723,12 +723,12 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Title = "Acerca de PseudoCode",
-            Width = 840,
-            Height = 540,
-            MinWidth = 840,
-            MinHeight = 540,
-            MaxWidth = 840,
-            MaxHeight = 540,
+            Width = 560,
+            Height = 640,
+            MinWidth = 560,
+            MinHeight = 640,
+            MaxWidth = 560,
+            MaxHeight = 640,
             CanResize = false,
             CanMinimize = false,
             CanMaximize = false,
@@ -740,8 +740,8 @@ public partial class MainWindow : Window
         var appIcon = new Image
         {
             Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/logoPseudoCode.png"))),
-            Width = 220,
-            Height = 120,
+            Width = 250,
+            Height = 135,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -749,8 +749,8 @@ public partial class MainWindow : Window
         var authorLogo = new Image
         {
             Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png"))),
-            Width = 150,
-            Height = 150,
+            Width = 170,
+            Height = 170,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -758,7 +758,9 @@ public partial class MainWindow : Window
         var content = new StackPanel
         {
             Spacing = 10,
-            Margin = new Thickness(24),
+            Margin = new Thickness(28),
+            MaxWidth = 500,
+            HorizontalAlignment = HorizontalAlignment.Center,
             Children =
             {
                 appIcon,
@@ -809,7 +811,12 @@ public partial class MainWindow : Window
             closeButton.Click += (_, _) => window.Close();
         }
 
-        window.Content = content;
+        window.Content = new ScrollViewer
+        {
+            Content = content,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+        };
         await window.ShowDialog(this);
     }
 
