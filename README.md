@@ -4,8 +4,8 @@
 
 > Editor educativo para escribir, ejecutar y aprender pseudocodigo en español.
 
-[![Version](https://img.shields.io/badge/version-2.0.3--beta.1-blue)](CHANGELOG.md)
-[![Estado](https://img.shields.io/badge/estado-beta-orange)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
+[![Estado](https://img.shields.io/badge/estado-estable-brightgreen)](CHANGELOG.md)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-lightgrey)](#descargas)
 [![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
 
@@ -146,7 +146,7 @@ Los paquetes se publican en [GitHub Releases](https://github.com/KityDeveloper/P
 | Fedora/Bazzite | `.rpm` | Instalacion con `dnf` o rpm-ostree |
 | macOS | Planeado | Pendiente |
 
-> Nota: algunos builds beta pueden no estar firmados todavia. En Windows o macOS puede aparecer una advertencia del sistema operativo.
+> Nota: algunos builds pueden no estar firmados todavia. En Windows o macOS puede aparecer una advertencia del sistema operativo.
 
 ## Configuracion JSON
 
@@ -169,9 +169,9 @@ La app tambien puede abrir estos documentos desde el menu **Ayuda**.
 
 ## Estado del proyecto
 
-Version actual: **2.0.3-beta.1**
+Version actual: **1.0.0**
 
-PseudoCode esta en beta. La base ya permite editar, abrir varios archivos, ejecutar pseudocodigo y configurar dialectos/colores, pero todavia hay trabajo planeado para depuracion paso a paso, tabla de prueba de escritorio y empaquetado mas pulido.
+PseudoCode llega a su primera version estable. La app ya permite editar, abrir varios archivos, ejecutar pseudocodigo, depurar paso a paso y configurar dialectos/colores desde JSON. Todavia hay trabajo planeado para tabla de prueba de escritorio, mas ejemplos y empaquetado mas pulido.
 
 ## Autor
 

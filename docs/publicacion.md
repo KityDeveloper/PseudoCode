@@ -4,7 +4,7 @@
 
 El workflow `Release` de GitHub Actions se ejecuta manualmente desde **Actions**. El tag es opcional. Si no se escribe uno, el workflow lee la version del proyecto y usa `vX.Y.Z`.
 
-La version actual es `2.0.3-beta.1`.
+La version actual es `1.0.0`.
 
 ## Artefactos
 
