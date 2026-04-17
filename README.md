@@ -4,7 +4,7 @@
 
 > Editor educativo para escribir, ejecutar y aprender pseudocodigo en español.
 
-[![Version](https://img.shields.io/badge/version-1.0.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
 [![Estado](https://img.shields.io/badge/estado-estable-brightgreen)](CHANGELOG.md)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-lightgrey)](#descargas)
 [![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
@@ -120,7 +120,8 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 
 - Editor de pseudocodigo en español.
 - Dialecto principal estilo PSeInt.
-- Ejecucion de algoritmos con salida y variables.
+- Ejecucion de algoritmos con salida viva y variables.
+- Controles `Play`, `Pausa/Continuar` y `Stop`.
 - Depuracion paso a paso con `F10`.
 - Diagnosticos y errores subrayados en rojo.
 - Tabs con multiples archivos.
@@ -169,9 +170,9 @@ La app tambien puede abrir estos documentos desde el menu **Ayuda**.
 
 ## Estado del proyecto
 
-Version actual: **1.0.1**
+Version actual: **1.1.0**
 
-PseudoCode llega a su primera version estable. La app ya permite editar, abrir varios archivos, ejecutar pseudocodigo, depurar paso a paso y configurar dialectos/colores desde JSON. Todavia hay trabajo planeado para tabla de prueba de escritorio, mas ejemplos y empaquetado mas pulido.
+PseudoCode esta en version estable. La app ya permite editar, abrir varios archivos, ejecutar pseudocodigo con salida en vivo, depurar paso a paso y configurar dialectos/colores desde JSON. Todavia hay trabajo planeado para tabla de prueba de escritorio, mas ejemplos y empaquetado mas pulido.
 
 ## Autor
 

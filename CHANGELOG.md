@@ -1,5 +1,27 @@
 # Notas de version
 
+## 1.1.0 - 2026-04-17
+
+Version estable enfocada en hacer la ejecucion mas parecida a una terminal real y mejorar programas interactivos tipo reloj/temporizador.
+
+### Cambios principales
+
+- Salida en vivo durante la ejecucion: la terminal se actualiza mientras el algoritmo corre, no solo al finalizar.
+- `Borrar Pantalla` ahora limpia visualmente la salida durante la ejecucion.
+- `Escribir` y `Esperar` publican actualizaciones intermedias para animaciones simples como relojes.
+- Controles de ejecucion con `Play`, `Pausa/Continuar` y `Stop`.
+- Cancelacion cooperativa del interprete para detener ejecuciones largas o pausadas.
+- Proteccion contra ciclos/salidas enormes para evitar bloqueos de la app.
+- Limpieza de diagnosticos, variables y subrayados viejos al iniciar una nueva ejecucion.
+- Evaluacion de expresiones mas segura: no intenta reemplazar variables dentro de textos entre comillas.
+- Mejor comportamiento para programas PSeInt con `Sin Saltar`, `Borrar Pantalla`, `Esperar` y `;`.
+
+### Notas
+
+- Version estable, sin etiqueta beta ni alpha.
+- Autor: Kity Dev.
+- Algunos builds pueden no estar firmados todavia, por lo que Windows o macOS pueden mostrar una advertencia.
+
 ## 1.0.1 - 2026-04-17
 
 Version estable de mantenimiento enfocada en pulir configuracion, documentacion y experiencia visual.
