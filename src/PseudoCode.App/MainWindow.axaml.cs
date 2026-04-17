@@ -494,11 +494,31 @@ public partial class MainWindow : Window
             Height = 320
         };
 
-        var visualThemeEditor = new StackPanel
+        var themeRowsPanel = new StackPanel
         {
-            Spacing = 10,
+            Spacing = 10
+        };
+        var themeToolsPanel = new StackPanel
+        {
+            Spacing = 12
+        };
+        var visualThemeEditor = new Grid
+        {
             Margin = new Thickness(12),
-            IsVisible = IsThemeTarget(selectedTarget)
+            IsVisible = IsThemeTarget(selectedTarget),
+            ColumnDefinitions = new ColumnDefinitions("*,280"),
+            ColumnSpacing = 18,
+            Children =
+            {
+                themeRowsPanel,
+                WithGridColumn(new Border
+                {
+                    BorderBrush = Brush("BorderBrushMuted"),
+                    BorderThickness = new Thickness(1, 0, 0, 0),
+                    Padding = new Thickness(16, 0, 0, 0),
+                    Child = themeToolsPanel
+                }, 1)
+            }
         };
         var visualTextEditor = new StackPanel
         {
@@ -545,16 +565,13 @@ public partial class MainWindow : Window
                 BorderThickness = new Thickness(1),
                 Background = Brushes.Transparent
             };
-            var selectButton = new Button
-            {
-                Content = "Editar",
-                Padding = new Thickness(10, 3),
-                Classes = { "command" }
-            };
-
             colorRows[colorKey] = (input, preview);
             input.GotFocus += (_, _) => SelectThemeColor(colorKey);
-            selectButton.Click += (_, _) => SelectThemeColor(colorKey);
+            preview.PointerPressed += (_, args) =>
+            {
+                SelectThemeColor(colorKey);
+                args.Handled = true;
+            };
             input.LostFocus += (_, _) =>
             {
                 if (isSyncingVisualEditor)
@@ -573,36 +590,43 @@ public partial class MainWindow : Window
                 }
             };
 
-            visualThemeEditor.Children.Add(new Grid
+            var colorRow = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("160,118,34,72"),
+                ColumnDefinitions = new ColumnDefinitions("160,118,34"),
                 ColumnSpacing = 10,
                 Children =
                 {
                     label,
                     WithGridColumn(input, 1),
-                    WithGridColumn(preview, 2),
-                    WithGridColumn(selectButton, 3)
+                    WithGridColumn(preview, 2)
                 }
-            });
+            };
+            colorRow.PointerPressed += (_, _) => SelectThemeColor(colorKey);
+            themeRowsPanel.Children.Add(colorRow);
         }
 
-        visualThemeEditor.Children.Add(new TextBlock
+        themeToolsPanel.Children.Add(new TextBlock
         {
             Text = "Selector de color",
             FontWeight = FontWeight.SemiBold,
             Foreground = Brush("TextPrimary"),
-            Margin = new Thickness(0, 8, 0, 0)
+            Margin = new Thickness(0, 0, 0, 0)
         });
-        visualThemeEditor.Children.Add(new TextBlock
+        themeToolsPanel.Children.Add(new TextBlock
         {
-            Text = "Tambien puedes escribir el color como #RRGGBB o usar un color rapido.",
+            Text = "Escribe #RRGGBB en el campo o elige un color aqui.",
             Foreground = Brush("TextSecondary"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12
         });
-        visualThemeEditor.Children.Add(BuildQuickColorPalette(color => SetThemeColor(selectedColorKey, color)));
-        visualThemeEditor.Children.Add(colorPicker);
+        themeToolsPanel.Children.Add(BuildQuickColorPalette(color => SetThemeColor(selectedColorKey, color), compact: true));
+        themeToolsPanel.Children.Add(new TextBlock
+        {
+            Text = "Color libre",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = Brush("TextPrimary")
+        });
+        themeToolsPanel.Children.Add(colorPicker);
 
         colorPicker.ColorChanged += (_, args) =>
         {
@@ -1134,15 +1158,15 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Title = title,
-            Width = 1220,
+            Width = 1320,
             Height = 720,
-            MinWidth = 1040,
+            MinWidth = 1120,
             MinHeight = 520,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Brush("EditorBackground"),
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("230,6,*,6,480"),
+                ColumnDefinitions = new ColumnDefinitions("230,6,*,6,720"),
                 RowDefinitions = new RowDefinitions("Auto,*,Auto"),
                 Children =
                 {
@@ -1383,7 +1407,7 @@ public partial class MainWindow : Window
         };
     }
 
-    private StackPanel BuildQuickColorPalette(Action<string> applyColor)
+    private StackPanel BuildQuickColorPalette(Action<string> applyColor, bool compact = false)
     {
         var colors = new (string Label, string Hex)[]
         {
@@ -1417,6 +1441,25 @@ public partial class MainWindow : Window
 
         foreach (var (label, hex) in colors)
         {
+            if (compact)
+            {
+                var swatch = new Button
+                {
+                    Width = 30,
+                    Height = 30,
+                    Padding = new Thickness(0),
+                    Margin = new Thickness(0, 0, 8, 8),
+                    Background = new SolidColorBrush(Color.Parse(hex)),
+                    BorderBrush = Brush("BorderBrushMuted"),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4)
+                };
+                ToolTip.SetTip(swatch, $"{label} {hex}");
+                swatch.Click += (_, _) => applyColor(hex);
+                wrap.Children.Add(swatch);
+                continue;
+            }
+
             var button = new Button
             {
                 Content = new StackPanel
