@@ -26,8 +26,15 @@ internal sealed class AdvancedPseudoInterpreter
     public ExecutionResult Start(string source)
     {
         _inputs.Clear();
+        ResetExecutionState();
         _program = Parse(source);
-        return ExecuteFromStart();
+        if (_diagnostics.Count > 0)
+        {
+            return BuildResult();
+        }
+
+        ExecuteBlock(_program);
+        return BuildResult();
     }
 
     public ExecutionResult Continue(string input)
@@ -45,9 +52,14 @@ internal sealed class AdvancedPseudoInterpreter
     public DebugStepResult StartDebug(string source)
     {
         _inputs.Clear();
-        _program = Parse(source);
         ResetExecutionState();
+        _program = Parse(source);
         _debugFrames.Clear();
+        if (_diagnostics.Count > 0)
+        {
+            return BuildDebugResult(isFinished: true);
+        }
+
         _debugFrames.Add(new BlockFrame(_program));
         return BuildDebugResult(isFinished: false);
     }
