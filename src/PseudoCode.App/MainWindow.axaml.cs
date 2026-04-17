@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,6 +12,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using PseudoCode.App.Services;
@@ -26,8 +29,26 @@ public partial class MainWindow : Window
     private const double MinInterfaceScale = 0.8;
     private const double MaxInterfaceScale = 1.4;
     private const double InterfaceScaleStep = 0.1;
+    private static readonly string[] ThemeColorKeys =
+    [
+        "keyword",
+        "type",
+        "string",
+        "number",
+        "operator",
+        "comment",
+        "blockBackground",
+        "diagnosticUnderline",
+        "editorBackground"
+    ];
+
+    private static readonly JsonSerializerOptions JsonWriteOptions = new()
+    {
+        WriteIndented = true
+    };
 
     private readonly List<OpenDocument> _openDocuments = [];
+    private readonly Dictionary<string, Window> _singleInstanceWindows = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeSettings _runtimeSettings;
     private PseudoLanguageDefinition _language;
     private PseudoSyntaxValidator _syntaxValidator;
@@ -313,13 +334,25 @@ public partial class MainWindow : Window
 
     private Task ShowDocumentationAsync(DocumentationPage page)
     {
+        var key = $"documentation:{page.Id}";
+        if (ActivateSingleInstanceWindow(key))
+        {
+            return Task.CompletedTask;
+        }
+
         var window = DocumentationService.BuildWindow(page, _isLightTheme ? LightTheme : DarkTheme);
-        window.Show(this);
+        ShowSingleInstanceWindow(key, window);
         return Task.CompletedTask;
     }
 
     private Task ShowJsonSettingsEditorAsync(string title, Func<JsonConfigTarget, bool> filter)
     {
+        var key = $"json-editor:{title}";
+        if (ActivateSingleInstanceWindow(key))
+        {
+            return Task.CompletedTask;
+        }
+
         var targets = AppSettingsService.GetConfigTargets(_runtimeSettings).Where(filter).ToArray();
         if (targets.Length == 0)
         {
@@ -343,28 +376,236 @@ public partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
 
-        var editor = new TextBox
+        var editor = new TextEditor
         {
             Text = AppSettingsService.ReadOrTemplate(selectedTarget),
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.NoWrap,
+            ShowLineNumbers = true,
             FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
             FontSize = 13,
             Background = Brush("InsetBackground"),
             Foreground = Brush("TextPrimary"),
-            BorderBrush = Brush("BorderBrushMuted")
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
         };
-        ScrollViewer.SetHorizontalScrollBarVisibility(editor, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
-        ScrollViewer.SetVerticalScrollBarVisibility(editor, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+        editor.Options.ConvertTabsToSpaces = true;
+        editor.Options.IndentationSize = 2;
+        editor.TextArea.TextView.LineTransformers.Add(new JsonSyntaxColorizer());
+
+        var isSyncingVisualEditor = false;
+        var selectedColorKey = "keyword";
+        var colorRows = new Dictionary<string, (TextBox TextBox, Border Preview)>(StringComparer.OrdinalIgnoreCase);
+        var colorPicker = new ColorView
+        {
+            Color = Color.Parse("#5EA1FF"),
+            IsAlphaEnabled = false,
+            IsAlphaVisible = false,
+            IsColorModelVisible = false,
+            IsColorComponentsVisible = false,
+            IsAccentColorsVisible = true,
+            IsColorPreviewVisible = true,
+            Height = 260
+        };
+
+        var visualThemeEditor = new StackPanel
+        {
+            Spacing = 10,
+            Margin = new Thickness(12),
+            IsVisible = IsThemeTarget(selectedTarget)
+        };
+
+        foreach (var colorKey in ThemeColorKeys)
+        {
+            var label = new TextBlock
+            {
+                Text = colorKey,
+                Foreground = Brush("TextSecondary"),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var input = new TextBox
+            {
+                MinWidth = 92,
+                Text = "#000000",
+                FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+                FontSize = 12,
+                Background = Brush("InsetBackground"),
+                Foreground = Brush("TextPrimary"),
+                BorderBrush = Brush("BorderBrushMuted")
+            };
+            var preview = new Border
+            {
+                Width = 28,
+                Height = 24,
+                CornerRadius = new CornerRadius(4),
+                BorderBrush = Brush("BorderBrushMuted"),
+                BorderThickness = new Thickness(1),
+                Background = Brushes.Transparent
+            };
+            var selectButton = new Button
+            {
+                Content = "Editar",
+                Padding = new Thickness(8, 3),
+                Classes = { "command" }
+            };
+
+            colorRows[colorKey] = (input, preview);
+            input.GotFocus += (_, _) => SelectThemeColor(colorKey);
+            selectButton.Click += (_, _) => SelectThemeColor(colorKey);
+            input.LostFocus += (_, _) =>
+            {
+                if (isSyncingVisualEditor)
+                {
+                    return;
+                }
+
+                ApplyThemeColorFromTextBox(colorKey);
+            };
+            input.KeyDown += (_, args) =>
+            {
+                if (args.Key == Key.Enter)
+                {
+                    ApplyThemeColorFromTextBox(colorKey);
+                    args.Handled = true;
+                }
+            };
+
+            visualThemeEditor.Children.Add(new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,96,34,Auto"),
+                ColumnSpacing = 8,
+                Children =
+                {
+                    label,
+                    WithGridColumn(input, 1),
+                    WithGridColumn(preview, 2),
+                    WithGridColumn(selectButton, 3)
+                }
+            });
+        }
+
+        visualThemeEditor.Children.Add(new TextBlock
+        {
+            Text = "Selector de color",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = Brush("TextPrimary"),
+            Margin = new Thickness(0, 8, 0, 0)
+        });
+        visualThemeEditor.Children.Add(colorPicker);
+
+        colorPicker.ColorChanged += (_, args) =>
+        {
+            if (isSyncingVisualEditor)
+            {
+                return;
+            }
+
+            SetThemeColor(selectedColorKey, ToHex(args.NewColor));
+        };
+
+        editor.TextChanged += (_, _) =>
+        {
+            if (!isSyncingVisualEditor)
+            {
+                RefreshVisualThemeEditor();
+            }
+        };
 
         void SelectTarget(JsonConfigTarget target)
         {
             selectedTarget = target;
             fileLabel.Text = target.RelativePath;
             editor.Text = AppSettingsService.ReadOrTemplate(target);
+            visualThemeEditor.IsVisible = IsThemeTarget(target);
+            RefreshVisualThemeEditor();
             status.Text = File.Exists(target.FullPath)
                 ? $"Editando copia de usuario: {target.FullPath}"
                 : "Este archivo aun no existe en tu perfil. Guardar creara una copia editable.";
+        }
+
+        void SelectThemeColor(string colorKey)
+        {
+            selectedColorKey = colorKey;
+            if (!TryGetThemeColor(editor.Text, colorKey, out var value) || !TryParseColor(value, out var color))
+            {
+                return;
+            }
+
+            isSyncingVisualEditor = true;
+            colorPicker.Color = color;
+            isSyncingVisualEditor = false;
+        }
+
+        void ApplyThemeColorFromTextBox(string colorKey)
+        {
+            if (!colorRows.TryGetValue(colorKey, out var row))
+            {
+                return;
+            }
+
+            var value = NormalizeHex(row.TextBox.Text ?? string.Empty);
+            if (value is null)
+            {
+                status.Text = $"Color invalido en '{colorKey}'. Usa formato #RRGGBB.";
+                RefreshVisualThemeEditor();
+                return;
+            }
+
+            SetThemeColor(colorKey, value);
+        }
+
+        void SetThemeColor(string colorKey, string color)
+        {
+            var updated = TrySetThemeColor(editor.Text, colorKey, color);
+            if (updated is null)
+            {
+                status.Text = $"No pude actualizar '{colorKey}'. Revisa que sea un tema JSON valido.";
+                return;
+            }
+
+            isSyncingVisualEditor = true;
+            editor.Text = updated;
+            if (colorRows.TryGetValue(colorKey, out var row))
+            {
+                row.TextBox.Text = color;
+                row.Preview.Background = new SolidColorBrush(Color.Parse(color));
+            }
+            colorPicker.Color = Color.Parse(color);
+            isSyncingVisualEditor = false;
+            status.Text = $"Color actualizado: {colorKey} = {color}";
+        }
+
+        void RefreshVisualThemeEditor()
+        {
+            if (!IsThemeTarget(selectedTarget))
+            {
+                return;
+            }
+
+            isSyncingVisualEditor = true;
+            foreach (var colorKey in ThemeColorKeys)
+            {
+                if (!colorRows.TryGetValue(colorKey, out var row))
+                {
+                    continue;
+                }
+
+                if (TryGetThemeColor(editor.Text, colorKey, out var value) && TryParseColor(value, out var color))
+                {
+                    var hex = ToHex(color);
+                    row.TextBox.Text = hex;
+                    row.Preview.Background = new SolidColorBrush(color);
+                }
+                else
+                {
+                    row.TextBox.Text = string.Empty;
+                    row.Preview.Background = Brushes.Transparent;
+                }
+            }
+
+            if (TryGetThemeColor(editor.Text, selectedColorKey, out var selectedColor) && TryParseColor(selectedColor, out var parsed))
+            {
+                colorPicker.Color = parsed;
+            }
+            isSyncingVisualEditor = false;
         }
 
         var targetList = new StackPanel
@@ -485,7 +726,7 @@ public partial class MainWindow : Window
                 }
             }
         };
-        Grid.SetColumnSpan(header, 2);
+        Grid.SetColumnSpan(header, 3);
 
         var navigation = new Border
         {
@@ -503,6 +744,16 @@ public partial class MainWindow : Window
         };
         Grid.SetColumn(editorPanel, 1);
         Grid.SetRow(editorPanel, 1);
+
+        var visualThemePanel = new Border
+        {
+            Background = Brush("PanelBackground"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            BorderThickness = new Thickness(1, 0, 0, 0),
+            Child = new ScrollViewer { Content = visualThemeEditor }
+        };
+        Grid.SetColumn(visualThemePanel, 2);
+        Grid.SetRow(visualThemePanel, 1);
 
         var actionButtons = new StackPanel
         {
@@ -535,7 +786,7 @@ public partial class MainWindow : Window
                 }
             }
         };
-        Grid.SetColumnSpan(footer, 2);
+        Grid.SetColumnSpan(footer, 3);
         Grid.SetRow(footer, 2);
 
         var window = new Window
@@ -549,24 +800,31 @@ public partial class MainWindow : Window
             Background = Brush("EditorBackground"),
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("230,*"),
+                ColumnDefinitions = new ColumnDefinitions("230,*,300"),
                 RowDefinitions = new RowDefinitions("Auto,*,Auto"),
                 Children =
                 {
                     header,
                     navigation,
                     editorPanel,
+                    visualThemePanel,
                     footer
                 }
             }
         };
 
-        window.Show(this);
+        ShowSingleInstanceWindow(key, window);
         return Task.CompletedTask;
     }
 
     private Task ShowSettingsConfigurationAsync()
     {
+        const string key = "settings-overview";
+        if (ActivateSingleInstanceWindow(key))
+        {
+            return Task.CompletedTask;
+        }
+
         var colors = _isLightTheme ? LightTheme : DarkTheme;
         var window = new Window
         {
@@ -688,9 +946,122 @@ public partial class MainWindow : Window
         {
             Content = content
         };
-        window.Show(this);
+        ShowSingleInstanceWindow(key, window);
         return Task.CompletedTask;
     }
+
+    private bool ActivateSingleInstanceWindow(string key)
+    {
+        if (!_singleInstanceWindows.TryGetValue(key, out var window))
+        {
+            return false;
+        }
+
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        window.Activate();
+        return true;
+    }
+
+    private void ShowSingleInstanceWindow(string key, Window window)
+    {
+        _singleInstanceWindows[key] = window;
+        window.Closed += (_, _) =>
+        {
+            if (_singleInstanceWindows.TryGetValue(key, out var current) && ReferenceEquals(current, window))
+            {
+                _singleInstanceWindows.Remove(key);
+            }
+        };
+        window.Show(this);
+        window.Activate();
+    }
+
+    private static T WithGridColumn<T>(T control, int column)
+        where T : Control
+    {
+        Grid.SetColumn(control, column);
+        return control;
+    }
+
+    private static bool IsThemeTarget(JsonConfigTarget target) =>
+        target.RelativePath.StartsWith("syntax-themes/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryGetThemeColor(string json, string colorKey, out string value)
+    {
+        try
+        {
+            var node = JsonNode.Parse(json);
+            value = node?["syntax"]?[colorKey]?.GetValue<string>() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+        catch
+        {
+            value = string.Empty;
+            return false;
+        }
+    }
+
+    private static string? TrySetThemeColor(string json, string colorKey, string color)
+    {
+        try
+        {
+            var node = JsonNode.Parse(json) as JsonObject;
+            if (node is null)
+            {
+                return null;
+            }
+
+            if (node["syntax"] is not JsonObject syntax)
+            {
+                syntax = [];
+                node["syntax"] = syntax;
+            }
+
+            syntax[colorKey] = color;
+            return node.ToJsonString(JsonWriteOptions) + Environment.NewLine;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? NormalizeHex(string value)
+    {
+        value = value.Trim();
+        if (!value.StartsWith('#'))
+        {
+            value = "#" + value;
+        }
+
+        if (value.Length == 4)
+        {
+            value = $"#{value[1]}{value[1]}{value[2]}{value[2]}{value[3]}{value[3]}";
+        }
+
+        return TryParseColor(value, out var color) ? ToHex(color) : null;
+    }
+
+    private static bool TryParseColor(string value, out Color color)
+    {
+        try
+        {
+            color = Color.Parse(value);
+            return true;
+        }
+        catch
+        {
+            color = default;
+            return false;
+        }
+    }
+
+    private static string ToHex(Color color) =>
+        $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
     private void ReloadRuntimeSettings()
     {

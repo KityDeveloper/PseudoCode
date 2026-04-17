@@ -66,6 +66,13 @@ Cuando guardas un dialecto desde **Configurar sintaxis**, la app lee el campo `i
 
 Cuando guardas un tema desde **Temas para el codigo fuente**, la app lee el campo `id`, actualiza el tema del modo activo y repinta el editor al momento. Si estas en modo oscuro cambia `syntaxThemeDark`; si estas en modo claro cambia `syntaxThemeLight`.
 
+La ventana de temas incluye dos formas de editar:
+
+- Editor JSON con resaltado de sintaxis.
+- Panel visual de colores con campos hex, vista previa y selector de color.
+
+El panel visual actualiza el JSON automaticamente, asi que puedes ajustar colores sin escribir cada propiedad a mano.
+
 Tambien puedes abrir **Configuracion > Carpeta de configuracion** para:
 
 - Ver el dialecto activo.
