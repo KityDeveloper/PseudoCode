@@ -46,6 +46,12 @@ public partial class MainWindow : Window
     {
         WriteIndented = true
     };
+    private static readonly JsonSerializerOptions JsonReadOptions = new()
+    {
+        AllowTrailingCommas = true,
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip
+    };
 
     private readonly List<OpenDocument> _openDocuments = [];
     private readonly Dictionary<string, Window> _singleInstanceWindows = new(StringComparer.OrdinalIgnoreCase);
@@ -57,6 +63,7 @@ public partial class MainWindow : Window
     private HelpTopic[] _helpTopics;
     private List<RecentDocumentInfo> _recentDocuments;
     private OpenDocument? _currentDocument;
+    private bool _formatChordArmed;
     private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
     private bool _isSwitchingDocument;
@@ -221,6 +228,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (TryHandleFormatShortcut(e))
+        {
+            return;
+        }
+
         if (IsIncreaseKey(e))
         {
             ZoomInterface(1);
@@ -272,6 +284,11 @@ public partial class MainWindow : Window
         EditorTextBox.Focus();
         EditorTextBox.SelectAll();
         UpdateWindowState("Texto seleccionado");
+    }
+
+    private void FormatDocument_Click(object? sender, RoutedEventArgs e)
+    {
+        FormatCurrentDocument();
     }
 
     private void ClearOutput_Click(object? sender, RoutedEventArgs e)
@@ -401,6 +418,56 @@ public partial class MainWindow : Window
         editor.Options.IndentationSize = 2;
         editor.TextArea.TextView.LineTransformers.Add(new JsonSyntaxColorizer(_isLightTheme));
 
+        var codePreview = new TextEditor
+        {
+            Text = BuildPreviewCode(_language),
+            IsReadOnly = true,
+            ShowLineNumbers = true,
+            FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+            FontSize = 13,
+            Background = Brush("InsetBackground"),
+            Foreground = Brush("TextPrimary"),
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+        };
+        var codePreviewColorizer = new PseudoCodeColorizer(_language, _runtimeSettings.DarkSyntaxTheme.ToPalette());
+        codePreview.TextArea.TextView.LineTransformers.Add(codePreviewColorizer);
+
+        var codePreviewTitle = new TextBlock
+        {
+            Text = "Vista previa del codigo",
+            Foreground = Brush("TextPrimary"),
+            FontWeight = FontWeight.SemiBold
+        };
+
+        var codePreviewPanel = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*"),
+            IsVisible = IsPreviewTarget(selectedTarget),
+            Children =
+            {
+                new Border
+                {
+                    Background = Brush("PanelBackground"),
+                    BorderBrush = Brush("BorderBrushMuted"),
+                    BorderThickness = new Thickness(0, 1, 0, 1),
+                    Padding = new Thickness(10, 6),
+                    Child = codePreviewTitle
+                },
+                WithGridRow(codePreview, 1)
+            }
+        };
+        var codePreviewSplitter = new GridSplitter
+        {
+            Height = 6,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Brush("BorderBrushMuted"),
+            ShowsPreview = true,
+            IsVisible = IsPreviewTarget(selectedTarget)
+        };
+        var editorPanelRows = new RowDefinitions(IsPreviewTarget(selectedTarget) ? "*,6,210" : "*,0,0");
+
         var isSyncingVisualEditor = false;
         var selectedColorKey = "keyword";
         var colorRows = new Dictionary<string, (TextBox TextBox, Border Preview)>(StringComparer.OrdinalIgnoreCase);
@@ -457,6 +524,7 @@ public partial class MainWindow : Window
                 Foreground = Brush("TextPrimary"),
                 BorderBrush = Brush("BorderBrushMuted")
             };
+            input.PointerPressed += (_, _) => input.Focus(NavigationMethod.Pointer);
             var preview = new Border
             {
                 Width = 28,
@@ -533,6 +601,7 @@ public partial class MainWindow : Window
             {
                 RefreshVisualThemeEditor();
                 RebuildTextSettingsEditor();
+                UpdateCodePreview();
             }
         };
 
@@ -543,8 +612,10 @@ public partial class MainWindow : Window
             editor.Text = AppSettingsService.ReadOrTemplate(target);
             visualThemeEditor.IsVisible = IsThemeTarget(target);
             visualTextEditor.IsVisible = !IsThemeTarget(target);
+            SetCodePreviewVisibility(IsPreviewTarget(target));
             EnsureThemeDefaultsFromTemplate();
             RefreshVisualThemeEditor();
+            UpdateCodePreview();
             RebuildTextSettingsEditor();
             status.Text = File.Exists(target.FullPath)
                 ? $"Editando copia de usuario: {target.FullPath}"
@@ -600,6 +671,7 @@ public partial class MainWindow : Window
             }
             colorPicker.Color = Color.Parse(color);
             isSyncingVisualEditor = false;
+            UpdateCodePreview();
             status.Text = $"Color actualizado: {colorKey} = {color}";
         }
 
@@ -636,6 +708,7 @@ public partial class MainWindow : Window
                 colorPicker.Color = parsed;
             }
             isSyncingVisualEditor = false;
+            UpdateCodePreview();
         }
 
         void EnsureThemeDefaultsFromTemplate()
@@ -759,7 +832,7 @@ public partial class MainWindow : Window
                 isSyncingVisualEditor = true;
                 editor.Text = updated;
                 isSyncingVisualEditor = false;
-                RebuildTextSettingsEditor();
+                UpdateCodePreview();
             }
 
             void SetJsonArray(string[] path, string value)
@@ -775,12 +848,49 @@ public partial class MainWindow : Window
                 isSyncingVisualEditor = true;
                 editor.Text = updated;
                 isSyncingVisualEditor = false;
-                RebuildTextSettingsEditor();
+                UpdateCodePreview();
             }
+        }
+
+        void UpdateCodePreview()
+        {
+            if (!IsPreviewTarget(selectedTarget))
+            {
+                return;
+            }
+
+            var previewLanguage = IsDialectTarget(selectedTarget)
+                ? BuildPreviewLanguage(editor.Text ?? string.Empty)
+                : _language;
+            var palette = IsThemeTarget(selectedTarget)
+                ? BuildThemePreviewPalette(editor.Text ?? string.Empty)
+                : (_isLightTheme ? _runtimeSettings.LightSyntaxTheme : _runtimeSettings.DarkSyntaxTheme).ToPalette();
+
+            codePreviewTitle.Text = IsDialectTarget(selectedTarget)
+                ? "Vista previa con esta sintaxis"
+                : "Vista previa del codigo";
+            codePreview.Text = BuildPreviewCode(previewLanguage);
+            codePreviewColorizer.SetLanguage(previewLanguage);
+            codePreviewColorizer.SetPalette(palette);
+            codePreview.Background = palette.EditorBackgroundBrush;
+            codePreview.TextArea.Background = palette.EditorBackgroundBrush;
+            codePreview.Foreground = BuildReadableTextBrush(palette.EditorBackgroundBrush);
+            codePreview.LineNumbersForeground = BuildMutedTextBrush(palette.EditorBackgroundBrush);
+            codePreview.TextArea.Caret.CaretBrush = BuildReadableTextBrush(palette.EditorBackgroundBrush);
+            codePreview.TextArea.TextView.Redraw();
+        }
+
+        void SetCodePreviewVisibility(bool isVisible)
+        {
+            codePreviewPanel.IsVisible = isVisible;
+            codePreviewSplitter.IsVisible = isVisible;
+            editorPanelRows[1].Height = new GridLength(isVisible ? 6 : 0);
+            editorPanelRows[2].Height = new GridLength(isVisible ? 210 : 0);
         }
 
         EnsureThemeDefaultsFromTemplate();
         RefreshVisualThemeEditor();
+        UpdateCodePreview();
         RebuildTextSettingsEditor();
 
         var targetList = new StackPanel
@@ -901,7 +1011,7 @@ public partial class MainWindow : Window
                 }
             }
         };
-        Grid.SetColumnSpan(header, 3);
+        Grid.SetColumnSpan(header, 5);
 
         var navigation = new Border
         {
@@ -914,10 +1024,19 @@ public partial class MainWindow : Window
 
         var editorPanel = new Border
         {
-            Padding = new Thickness(12),
-            Child = editor
+            Padding = new Thickness(12, 0, 12, 0),
+            Child = new Grid
+            {
+                RowDefinitions = editorPanelRows,
+                Children =
+                {
+                    editor,
+                    WithGridRow(codePreviewSplitter, 1),
+                    WithGridRow(codePreviewPanel, 2)
+                }
+            }
         };
-        Grid.SetColumn(editorPanel, 1);
+        Grid.SetColumn(editorPanel, 2);
         Grid.SetRow(editorPanel, 1);
 
         var visualThemePanel = new Border
@@ -932,8 +1051,30 @@ public partial class MainWindow : Window
                 VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
             }
         };
-        Grid.SetColumn(visualThemePanel, 2);
+        Grid.SetColumn(visualThemePanel, 4);
         Grid.SetRow(visualThemePanel, 1);
+
+        var navigationSplitter = new GridSplitter
+        {
+            Width = 6,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brush("BorderBrushMuted"),
+            ShowsPreview = true
+        };
+        Grid.SetColumn(navigationSplitter, 1);
+        Grid.SetRow(navigationSplitter, 1);
+
+        var visualSplitter = new GridSplitter
+        {
+            Width = 6,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brush("BorderBrushMuted"),
+            ShowsPreview = true
+        };
+        Grid.SetColumn(visualSplitter, 3);
+        Grid.SetRow(visualSplitter, 1);
 
         var actionButtons = new StackPanel
         {
@@ -966,7 +1107,7 @@ public partial class MainWindow : Window
                 }
             }
         };
-        Grid.SetColumnSpan(footer, 3);
+        Grid.SetColumnSpan(footer, 5);
         Grid.SetRow(footer, 2);
 
         var window = new Window
@@ -980,13 +1121,15 @@ public partial class MainWindow : Window
             Background = Brush("EditorBackground"),
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("230,*,480"),
+                ColumnDefinitions = new ColumnDefinitions("230,6,*,6,480"),
                 RowDefinitions = new RowDefinitions("Auto,*,Auto"),
                 Children =
                 {
                     header,
                     navigation,
+                    navigationSplitter,
                     editorPanel,
+                    visualSplitter,
                     visualThemePanel,
                     footer
                 }
@@ -1195,6 +1338,7 @@ public partial class MainWindow : Window
             FontSize = 13,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
+        input.PointerPressed += (_, _) => input.Focus(NavigationMethod.Pointer);
         input.LostFocus += (_, _) => commit(input.Text ?? string.Empty);
         input.KeyDown += (_, args) =>
         {
@@ -1234,6 +1378,12 @@ public partial class MainWindow : Window
 
     private static bool IsThemeTarget(JsonConfigTarget target) =>
         target.RelativePath.StartsWith("syntax-themes/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDialectTarget(JsonConfigTarget target) =>
+        target.RelativePath.StartsWith("dialects/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPreviewTarget(JsonConfigTarget target) =>
+        IsThemeTarget(target) || IsDialectTarget(target);
 
     private static bool TryParseJsonObject(string json, out JsonObject root)
     {
@@ -2096,10 +2246,28 @@ public partial class MainWindow : Window
         _debugLineRenderer = new DebugLineRenderer(BuildDebugLineBrush(palette));
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_debugLineRenderer);
         ApplyEditorTheme(DarkTheme, palette);
+        ConfigureEditorContextMenu();
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
         EditorTextBox.PointerWheelChanged += Editor_PointerWheelChanged;
+    }
+
+    private void ConfigureEditorContextMenu()
+    {
+        var formatItem = new MenuItem
+        {
+            Header = "Formatear documento (Ctrl+K, Ctrl+D)"
+        };
+        formatItem.Click += FormatDocument_Click;
+
+        EditorTextBox.ContextMenu = new ContextMenu
+        {
+            Items =
+            {
+                formatItem
+            }
+        };
     }
 
     private void Editor_TextEntered(object? sender, TextInputEventArgs e)
@@ -2125,6 +2293,11 @@ public partial class MainWindow : Window
 
     private void Editor_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (TryHandleFormatShortcut(e))
+        {
+            return;
+        }
+
         if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             ShowCompletion(force: true);
@@ -2196,6 +2369,43 @@ public partial class MainWindow : Window
         var key = e.Key.ToString();
         var keySymbol = e.KeySymbol ?? string.Empty;
         return key is "D0" or "NumPad0" || keySymbol is "0";
+    }
+
+    private bool TryHandleFormatShortcut(KeyEventArgs e)
+    {
+        var hasControl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (!hasControl)
+        {
+            _formatChordArmed = false;
+            return false;
+        }
+
+        if (e.Key == Key.K)
+        {
+            _formatChordArmed = true;
+            UpdateWindowState("Atajo de formato iniciado: presiona Ctrl+D");
+            e.Handled = true;
+            return true;
+        }
+
+        if (_formatChordArmed && e.Key == Key.D)
+        {
+            _formatChordArmed = false;
+            FormatCurrentDocument();
+            e.Handled = true;
+            return true;
+        }
+
+        if (e.Key == Key.F && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            _formatChordArmed = false;
+            FormatCurrentDocument();
+            e.Handled = true;
+            return true;
+        }
+
+        _formatChordArmed = false;
+        return false;
     }
 
     private bool TryHandleEditorZoomKey(KeyEventArgs e)
@@ -2302,12 +2512,136 @@ public partial class MainWindow : Window
         var trimmed = lineText.Trim();
         var nextIndent = currentIndent;
 
-        if (StartsLogicalBlock(trimmed))
+        if (ShouldOutdentCurrentLineOnEnter(trimmed, currentIndent, line.LineNumber, document))
+        {
+            nextIndent = currentIndent.Length >= 4 ? currentIndent[4..] : string.Empty;
+            document.Replace(line.Offset, currentIndent.Length, nextIndent);
+            var newOffset = Math.Max(line.Offset + nextIndent.Length + trimmed.Length, offset - (currentIndent.Length - nextIndent.Length));
+            EditorTextBox.CaretOffset = Math.Clamp(newOffset, 0, document.TextLength);
+        }
+
+        if (StartsLogicalBlock(trimmed) || IsMidBlock(trimmed) || IsSwitchCaseLabel(trimmed))
         {
             nextIndent += "    ";
         }
 
         InsertAtCaret(Environment.NewLine + nextIndent);
+    }
+
+    private bool ShouldOutdentCurrentLineOnEnter(string trimmed, string currentIndent, int lineNumber, TextDocument document)
+    {
+        if (currentIndent.Length < 4 || trimmed.Length == 0)
+        {
+            return false;
+        }
+
+        if (!IsClosingBlock(trimmed) && !IsMidBlock(trimmed) && !IsSwitchCaseLabel(trimmed))
+        {
+            return false;
+        }
+
+        var previousIndentLength = GetPreviousNonEmptyIndentLength(lineNumber, document);
+        return previousIndentLength >= 0 && currentIndent.Length >= previousIndentLength;
+    }
+
+    private static int GetPreviousNonEmptyIndentLength(int lineNumber, TextDocument document)
+    {
+        for (var index = lineNumber - 1; index >= 1; index--)
+        {
+            var line = document.GetLineByNumber(index);
+            var text = document.GetText(line.Offset, line.Length);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            return Regex.Match(text, @"^\s*").Value.Length;
+        }
+
+        return 0;
+    }
+
+    private void FormatCurrentDocument()
+    {
+        var document = EditorTextBox.Document;
+        if (document is null)
+        {
+            return;
+        }
+
+        var caretLine = document.GetLineByOffset(GetSafeCaretOffset(document)).LineNumber;
+        var formatted = FormatPseudoCode(EditorTextBox.Text ?? string.Empty);
+        if (string.Equals(EditorTextBox.Text, formatted, StringComparison.Ordinal))
+        {
+            UpdateWindowState("El documento ya esta formateado");
+            return;
+        }
+
+        EditorTextBox.Text = formatted;
+        if (_currentDocument is not null)
+        {
+            _currentDocument.Text = formatted;
+            _currentDocument.HasUnsavedChanges = true;
+        }
+
+        var targetLine = Math.Clamp(caretLine, 1, Math.Max(1, EditorTextBox.Document.LineCount));
+        var targetDocumentLine = EditorTextBox.Document.GetLineByNumber(targetLine);
+        EditorTextBox.CaretOffset = targetDocumentLine.Offset;
+        EditorTextBox.ScrollToLine(targetLine);
+        EditorTextBox.Focus();
+        if (_currentDocument is not null)
+        {
+            UpdateLiveSyntaxDiagnostics(_currentDocument);
+        }
+        RenderOpenDocuments();
+        UpdateWindowState("Documento formateado");
+    }
+
+    private string FormatPseudoCode(string text)
+    {
+        var usesCrLf = text.Contains("\r\n", StringComparison.Ordinal);
+        var newline = usesCrLf ? "\r\n" : "\n";
+        var endsWithNewline = text.EndsWith('\n') || text.EndsWith('\r');
+        var lines = Regex.Split(text, "\r\n|\n|\r");
+        var formatted = new List<string>(lines.Length);
+        var indentLevel = 0;
+
+        var lineCount = endsWithNewline && lines.Length > 0 ? lines.Length - 1 : lines.Length;
+        for (var index = 0; index < lineCount; index++)
+        {
+            var rawLine = lines[index];
+            var trimmed = rawLine.Trim();
+            if (trimmed.Length == 0)
+            {
+                formatted.Add(string.Empty);
+                continue;
+            }
+
+            if (IsClosingBlock(trimmed) || IsMidBlock(trimmed))
+            {
+                indentLevel = Math.Max(0, indentLevel - 1);
+            }
+
+            var lineIndent = indentLevel;
+            if (IsSwitchCaseLabel(trimmed))
+            {
+                lineIndent = indentLevel > 1 ? indentLevel - 1 : indentLevel;
+            }
+
+            formatted.Add(new string(' ', lineIndent * 4) + trimmed);
+
+            if (StartsLogicalBlock(trimmed) || IsMidBlock(trimmed))
+            {
+                indentLevel = lineIndent + 1;
+            }
+            else if (IsSwitchCaseLabel(trimmed))
+            {
+                indentLevel = lineIndent + 1;
+            }
+        }
+
+        var result = string.Join(newline, formatted);
+        return endsWithNewline ? result + newline : result;
     }
 
     private void InsertAtCaret(string text)
@@ -2876,6 +3210,84 @@ public partial class MainWindow : Window
             : new SolidColorBrush(Color.FromArgb(85, 76, 175, 80));
     }
 
+    private static PseudoCodeColorPalette BuildThemePreviewPalette(string json)
+    {
+        string ColorFor(string key)
+        {
+            if (TryGetThemeColor(json, key, out var value) && NormalizeHex(value) is { } normalized)
+            {
+                return normalized;
+            }
+
+            return DefaultThemeColor(key) ?? "#1E1E1E";
+        }
+
+        return new PseudoCodeColorPalette(
+            BrushFromHex(ColorFor("keyword")),
+            BrushFromHex(ColorFor("type")),
+            BrushFromHex(ColorFor("string")),
+            BrushFromHex(ColorFor("number")),
+            BrushFromHex(ColorFor("operator")),
+            BrushFromHex(ColorFor("comment")),
+            BrushFromHex(ColorFor("blockBackground")),
+            BrushFromHex(ColorFor("diagnosticUnderline")),
+            BrushFromHex(ColorFor("editorBackground")));
+    }
+
+    private static PseudoLanguageDefinition BuildPreviewLanguage(string json)
+    {
+        try
+        {
+            var dto = JsonSerializer.Deserialize<PseudoLanguageDto>(json, JsonReadOptions);
+            return dto is null
+                ? PseudoLanguageDefinition.CreateDefault()
+                : PseudoLanguageDefinition.FromDto(dto, []);
+        }
+        catch
+        {
+            return PseudoLanguageDefinition.CreateDefault();
+        }
+    }
+
+    private static string BuildPreviewCode(PseudoLanguageDefinition language)
+    {
+        var type = language.Types.FirstOrDefault() ?? "Entero";
+        return
+            $"{language.Keyword("algorithmStart")} VistaPrevia\n" +
+            $"    {language.Keyword("declare")} numero {language.Keyword("typeSeparator")} {type}\n" +
+            $"    numero <- 10 + 2\n" +
+            $"    {language.Keyword("if")} numero >= 10 {language.Keyword("then")}\n" +
+            $"        {language.Keyword("write")} \"Resultado: \", numero // comentario\n" +
+            $"    {language.Keyword("else")}\n" +
+            $"        {language.Keyword("write")} \"Menor\"\n" +
+            $"    {language.Keyword("endIf")}\n" +
+            $"{language.Keyword("algorithmEnd")}\n";
+    }
+
+    private static SolidColorBrush BrushFromHex(string color) => new(Color.Parse(color));
+
+    private static SolidColorBrush BuildReadableTextBrush(IBrush background)
+    {
+        var color = background is SolidColorBrush solid ? solid.Color : Color.Parse("#1E1E1E");
+        return IsLightColor(color)
+            ? new SolidColorBrush(Color.Parse("#1F2937"))
+            : new SolidColorBrush(Color.Parse("#E5E7EB"));
+    }
+
+    private static SolidColorBrush BuildMutedTextBrush(IBrush background)
+    {
+        var color = background is SolidColorBrush solid ? solid.Color : Color.Parse("#1E1E1E");
+        return IsLightColor(color)
+            ? new SolidColorBrush(Color.Parse("#6B7280"))
+            : new SolidColorBrush(Color.Parse("#9CA3AF"));
+    }
+
+    private static bool IsLightColor(Color color)
+    {
+        var luminance = (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255;
+        return luminance > 0.55;
+    }
+
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
 
     private Grid BuildAboutLink(string label, string text, string uri)
@@ -3003,12 +3415,64 @@ public partial class MainWindow : Window
     };
 
     private bool StartsLogicalBlock(string text) =>
-        _language.StartsWithKeyword(text, "algorithmStart") ||
-        _language.StartsWithKeyword(text, "processStart") ||
-        _language.StartsWithKeyword(text, "if") ||
-        _language.StartsWithKeyword(text, "while") ||
-        _language.StartsWithKeyword(text, "for") ||
-        _language.StartsWithKeyword(text, "switch");
+        KeywordLineStarts(text, "algorithmStart") ||
+        KeywordLineStarts(text, "processStart") ||
+        KeywordLineStarts(text, "if") ||
+        KeywordLineStarts(text, "while") ||
+        KeywordLineStarts(text, "for") ||
+        KeywordLineStarts(text, "switch");
+
+    private bool IsClosingBlock(string text) =>
+        KeywordLineStarts(text, "algorithmEnd") ||
+        KeywordLineStarts(text, "processEnd") ||
+        KeywordLineStarts(text, "endIf") ||
+        KeywordLineStarts(text, "endWhile") ||
+        KeywordLineStarts(text, "endFor") ||
+        KeywordLineStarts(text, "endSwitch");
+
+    private bool IsMidBlock(string text) =>
+        KeywordLineStarts(text, "else");
+
+    private bool IsSwitchCaseLabel(string text)
+    {
+        var withoutComment = StripInlineComment(text).Trim();
+        var comparable = withoutComment.TrimEnd(':').Trim();
+        if (KeywordLineStarts(comparable, "otherwise"))
+        {
+            return true;
+        }
+
+        return withoutComment.EndsWith(':') &&
+               !withoutComment.Contains("<-", StringComparison.Ordinal) &&
+               !StartsLogicalBlock(withoutComment) &&
+               !IsClosingBlock(withoutComment);
+    }
+
+    private bool KeywordLineStarts(string text, string role)
+    {
+        var keyword = _language.Keyword(role);
+        return text.Equals(keyword, StringComparison.OrdinalIgnoreCase) ||
+               text.StartsWith(keyword + " ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string StripInlineComment(string text)
+    {
+        var inString = false;
+        for (var index = 0; index < text.Length - 1; index++)
+        {
+            if (text[index] == '"')
+            {
+                inString = !inString;
+            }
+
+            if (!inString && text[index] == '/' && text[index + 1] == '/')
+            {
+                return text[..index];
+            }
+        }
+
+        return text;
+    }
 
     private string BuildOutputText(ExecutionResult result)
     {
