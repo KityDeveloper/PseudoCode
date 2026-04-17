@@ -43,6 +43,116 @@ internal static class AppSettingsService
         return new RuntimeSettings(language, dark, light, diagnostics, userSettingsPath);
     }
 
+    public static IReadOnlyList<string> CreateUserTemplateFiles(RuntimeSettings settings)
+    {
+        var written = new List<string>();
+        Directory.CreateDirectory(settings.UserSettingsPath);
+        Directory.CreateDirectory(Path.Combine(settings.UserSettingsPath, "dialects"));
+        Directory.CreateDirectory(Path.Combine(settings.UserSettingsPath, "syntax-themes"));
+
+        WriteIfMissing(
+            Path.Combine(settings.UserSettingsPath, "default-settings.json"),
+            """
+            {
+              "language": {
+                "activeDialect": "custom"
+              },
+              "editor": {
+                "syntaxThemeDark": "custom-dark",
+                "syntaxThemeLight": "light"
+              }
+            }
+            """,
+            written);
+
+        WriteIfMissing(
+            Path.Combine(settings.UserSettingsPath, "dialects", "custom.json"),
+            """
+            {
+              "id": "custom",
+              "displayName": "Custom",
+              "keywords": {
+                "algorithmStart": "Algoritmo",
+                "algorithmEnd": "FinAlgoritmo",
+                "processStart": "Proceso",
+                "processEnd": "FinProceso",
+                "declare": "Definir",
+                "typeSeparator": "Como",
+                "write": "Mostrar",
+                "read": "Pedir",
+                "if": "Si",
+                "then": "Entonces",
+                "else": "Sino",
+                "endIf": "FinSi",
+                "while": "Mientras",
+                "do": "Hacer",
+                "endWhile": "FinMientras",
+                "for": "Para",
+                "until": "Hasta",
+                "step": "Paso",
+                "endFor": "FinPara",
+                "switch": "Segun",
+                "otherwise": "De Otro Modo",
+                "endSwitch": "FinSegun",
+                "true": "Verdadero",
+                "false": "Falso",
+                "and": "Y",
+                "or": "O",
+                "not": "NO"
+              },
+              "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
+              "snippets": [
+                {
+                  "text": "Algoritmo",
+                  "insertText": "Algoritmo MiPrograma\n    \nFinAlgoritmo",
+                  "description": "Define el inicio y fin de un algoritmo.",
+                  "isTemplate": true
+                },
+                {
+                  "text": "Mostrar",
+                  "insertText": "Mostrar \"Mensaje\", variable",
+                  "description": "Muestra texto o valores en la salida.",
+                  "isTemplate": true
+                }
+              ]
+            }
+            """,
+            written);
+
+        WriteIfMissing(
+            Path.Combine(settings.UserSettingsPath, "syntax-themes", "custom-dark.json"),
+            """
+            {
+              "id": "custom-dark",
+              "displayName": "Custom Dark",
+              "syntax": {
+                "keyword": "#5EA1FF",
+                "type": "#4EC9B0",
+                "string": "#CE9178",
+                "number": "#B5CEA8",
+                "operator": "#DCDCAA",
+                "comment": "#6A9955",
+                "blockBackground": "#1F3B4D",
+                "diagnosticUnderline": "#FF4D4D"
+              }
+            }
+            """,
+            written);
+
+        return written;
+    }
+
+    private static void WriteIfMissing(string path, string content, List<string> written)
+    {
+        if (File.Exists(path))
+        {
+            return;
+        }
+
+        File.WriteAllText(path, content.Trim() + Environment.NewLine);
+        written.Add(path);
+    }
+
     private static AppSettingsDto? LoadSettingsFile(string path, List<string> diagnostics)
     {
         if (!File.Exists(path))

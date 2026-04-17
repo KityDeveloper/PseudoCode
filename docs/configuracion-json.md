@@ -48,6 +48,14 @@ macOS: ~/Library/Application Support/PseudoCode/settings/
 
 El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`.
 
+En la app puedes abrir **Ayuda > Configurar temas y dialectos** para:
+
+- Ver el dialecto activo.
+- Ver el tema oscuro y claro activos.
+- Copiar la ruta de settings de usuario.
+- Crear plantillas `default-settings.json`, `dialects/custom.json` y `syntax-themes/custom-dark.json`.
+- Abrir esta guia de configuracion.
+
 ## Dialectos
 
 Un dialecto reemplaza el lenguaje activo. No hay aliases dentro de un dialecto: cada rol tiene una palabra activa.

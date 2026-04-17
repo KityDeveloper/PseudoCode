@@ -73,6 +73,7 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 - Documentacion Markdown renderizada dentro de la app.
 - Dialectos JSON reemplazables.
 - Colores de sintaxis configurables.
+- Ventana para configurar temas y dialectos desde **Ayuda > Configurar temas y dialectos**.
 - Modo claro y modo oscuro.
 
 ## Descargas

@@ -253,6 +253,11 @@ public partial class MainWindow : Window
         await ShowDocumentationAsync(DocumentationService.JsonConfig);
     }
 
+    private async void SettingsConfiguration_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowSettingsConfigurationAsync();
+    }
+
     private async void ReleaseNotes_Click(object? sender, RoutedEventArgs e)
     {
         await ShowDocumentationAsync(DocumentationService.ReleaseNotes);
@@ -261,6 +266,132 @@ public partial class MainWindow : Window
     private async Task ShowDocumentationAsync(DocumentationPage page)
     {
         var window = DocumentationService.BuildWindow(page, _isLightTheme ? LightTheme : DarkTheme);
+        await window.ShowDialog(this);
+    }
+
+    private async Task ShowSettingsConfigurationAsync()
+    {
+        var colors = _isLightTheme ? LightTheme : DarkTheme;
+        var window = new Window
+        {
+            Title = "Configurar temas y dialectos",
+            Width = 760,
+            Height = 620,
+            MinWidth = 620,
+            MinHeight = 480,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush("EditorBackground")
+        };
+
+        var status = new TextBlock
+        {
+            Text = "Edita los JSON y reinicia la app para aplicar los cambios.",
+            Foreground = Brush("TextSecondary"),
+            TextWrapping = TextWrapping.Wrap
+        };
+
+        var pathBox = new TextBox
+        {
+            Text = _runtimeSettings.UserSettingsPath,
+            IsReadOnly = true,
+            Background = Brush("InsetBackground"),
+            Foreground = Brush("TextPrimary"),
+            BorderBrush = Brush("BorderBrushMuted")
+        };
+
+        var createButton = new Button { Content = "Crear plantillas JSON", Classes = { "command" } };
+        createButton.Click += (_, _) =>
+        {
+            var files = AppSettingsService.CreateUserTemplateFiles(_runtimeSettings);
+            status.Text = files.Count == 0
+                ? "Las plantillas ya existian. Puedes editarlas en la carpeta de settings."
+                : $"Plantillas creadas: {files.Count}. Reinicia la app despues de editarlas.";
+        };
+
+        var copyButton = new Button { Content = "Copiar ruta", Classes = { "command" } };
+        copyButton.Click += async (_, _) =>
+        {
+            if (Clipboard is not null)
+            {
+                await Clipboard.SetTextAsync(_runtimeSettings.UserSettingsPath);
+                status.Text = "Ruta copiada al portapapeles.";
+            }
+        };
+
+        var openButton = new Button { Content = "Abrir carpeta", Classes = { "command" } };
+        openButton.Click += async (_, _) =>
+        {
+            if (!await OpenFolderAsync(_runtimeSettings.UserSettingsPath) && Clipboard is not null)
+            {
+                await Clipboard.SetTextAsync(_runtimeSettings.UserSettingsPath);
+                status.Text = "No pude abrir la carpeta; copie la ruta al portapapeles.";
+            }
+        };
+
+        var docsButton = new Button { Content = "Ver guia JSON", Classes = { "command" } };
+        docsButton.Click += async (_, _) => await ShowDocumentationAsync(DocumentationService.JsonConfig);
+
+        var content = new StackPanel
+        {
+            Spacing = 14,
+            Margin = new Thickness(24),
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Configurar temas y dialectos",
+                    FontSize = 22,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Brush("TextPrimary")
+                },
+                new TextBlock
+                {
+                    Text = "Los dialectos reemplazan las palabras activas del lenguaje. Los temas cambian solo los colores de sintaxis del editor.",
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                },
+                BuildSettingsInfo("Dialecto activo", $"{_language.DisplayName} ({_language.Id})"),
+                BuildSettingsInfo("Tema oscuro", $"{_runtimeSettings.DarkSyntaxTheme.DisplayName} ({_runtimeSettings.DarkSyntaxTheme.Id})"),
+                BuildSettingsInfo("Tema claro", $"{_runtimeSettings.LightSyntaxTheme.DisplayName} ({_runtimeSettings.LightSyntaxTheme.Id})"),
+                BuildSettingsInfo("Carpeta de usuario", string.Empty),
+                pathBox,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children =
+                    {
+                        createButton,
+                        openButton,
+                        copyButton,
+                        docsButton
+                    }
+                },
+                new TextBlock
+                {
+                    Text = "Archivos esperados",
+                    FontSize = 16,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Brush("TextPrimary")
+                },
+                BuildCodePreview(
+                    "default-settings.json\n" +
+                    "dialects/custom.json\n" +
+                    "syntax-themes/custom-dark.json"),
+                new TextBlock
+                {
+                    Text = "Ejemplo rapido: cambia activeDialect a custom, edita dialects/custom.json y reemplaza write de Escribir a Mostrar. En ese dialecto Escribir dejara de ser valido.",
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                },
+                status
+            }
+        };
+
+        window.Content = new ScrollViewer
+        {
+            Content = content
+        };
         await window.ShowDialog(this);
     }
 
@@ -1367,6 +1498,65 @@ public partial class MainWindow : Window
         }
         UpdateWindowState("No pude abrir el navegador; copie el link");
     }
+
+    private async Task<bool> OpenFolderAsync(string path)
+    {
+        var launcher = TopLevel.GetTopLevel(this)?.Launcher;
+        if (launcher is null)
+        {
+            return false;
+        }
+
+        var folderUri = new Uri(Path.GetFullPath(path) + Path.DirectorySeparatorChar);
+        return await launcher.LaunchUriAsync(folderUri);
+    }
+
+    private Grid BuildSettingsInfo(string label, string value)
+    {
+        var row = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(new GridLength(150)),
+                new ColumnDefinition(GridLength.Star)
+            },
+            ColumnSpacing = 10
+        };
+
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            Foreground = Brush("TextSecondary"),
+            FontWeight = FontWeight.SemiBold
+        });
+
+        var valueText = new TextBlock
+        {
+            Text = value,
+            Foreground = Brush("TextPrimary"),
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetColumn(valueText, 1);
+        row.Children.Add(valueText);
+
+        return row;
+    }
+
+    private Border BuildCodePreview(string text) => new()
+    {
+        Background = Brush("InsetBackground"),
+        BorderBrush = Brush("BorderBrushMuted"),
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(4),
+        Padding = new Thickness(12),
+        Child = new TextBlock
+        {
+            Text = text,
+            Foreground = Brush("TextPrimary"),
+            FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+            TextWrapping = TextWrapping.Wrap
+        }
+    };
 
     private bool StartsLogicalBlock(string text) =>
         _language.StartsWithKeyword(text, "algorithmStart") ||

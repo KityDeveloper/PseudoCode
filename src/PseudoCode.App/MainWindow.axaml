@@ -84,6 +84,7 @@
               <Separator />
               <MenuItem Header="Documentación" Click="Documentation_Click" />
               <MenuItem Header="Configuración JSON" Click="JsonConfiguration_Click" />
+              <MenuItem Header="Configurar temas y dialectos" Click="SettingsConfiguration_Click" />
               <MenuItem Header="Notas de versión" Click="ReleaseNotes_Click" />
               <Separator />
               <MenuItem Header="Acerca de PseudoCode" Click="About_Click" />

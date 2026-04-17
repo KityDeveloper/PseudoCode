@@ -47,6 +47,8 @@ La app puede ejecutar estructuras basicas de pseudocodigo: asignaciones, `Defini
 
 El lenguaje activo y los colores de sintaxis se pueden cambiar con JSON. Lee [Configuracion JSON](configuracion-json.md) para ver rutas, ejemplos y reglas.
 
+Desde la app tambien puedes abrir **Ayuda > Configurar temas y dialectos** para ver la carpeta de settings, crear plantillas JSON y copiar la ruta de configuracion.
+
 ## Mas documentacion
 
 - `docs/configuracion-json.md`
