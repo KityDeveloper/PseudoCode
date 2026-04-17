@@ -8,6 +8,8 @@ Version estable de mantenimiento enfocada en pulir configuracion, documentacion 
 
 - Mejoras al editor de temas de sintaxis con panel de color mas claro, colores rapidos y vista previa del codigo.
 - Vista previa de dialectos para ver como cambia el pseudocodigo al modificar palabras del lenguaje.
+- Soporte PSeInt para `Borrar Pantalla`, `Esperar ... Segundos/Milisegundos` y `Escribir ... Sin Saltar`.
+- Compatibilidad con `;` al final de instrucciones estilo PSeInt.
 - Mejor contraste del colorizador JSON en modo claro.
 - Subrayado de diagnostico visible dentro del preview de temas.
 - Documentacion de pseudolenguaje ampliada con ejemplos de sintaxis y bloques de codigo.

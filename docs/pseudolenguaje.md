@@ -131,6 +131,26 @@ Algoritmo Salida
 FinAlgoritmo
 ```
 
+### Escribir sin saltar
+
+`Sin Saltar` permite escribir sin crear una linea nueva. Es util para armar una salida en varias instrucciones.
+
+```text
+Algoritmo SinSaltar
+    Definir h Como Entero
+
+    h <- 8
+
+    Si h < 10 Entonces
+        Escribir "0", h, ":" Sin Saltar;
+    Sino
+        Escribir h, ":" Sin Saltar;
+    FinSi
+
+    Escribir "00"
+FinAlgoritmo
+```
+
 ## Leer
 
 `Leer` pide un dato. La ejecucion se pausa hasta que escribas el valor en la consola inferior y presiones enviar.
@@ -149,6 +169,36 @@ Algoritmo Entrada
     Escribir "Hola ", nombre, ". Edad: ", edad
 FinAlgoritmo
 ```
+
+## Borrar Pantalla
+
+`Borrar Pantalla` limpia la salida de la ejecucion.
+
+```text
+Algoritmo LimpiarSalida
+    Escribir "Esto se borra"
+    Borrar Pantalla
+    Escribir "Esto queda visible"
+FinAlgoritmo
+```
+
+Tambien se acepta `Borrar` como forma corta.
+
+## Esperar
+
+`Esperar` pausa la ejecucion por segundos o milisegundos.
+
+```text
+Algoritmo Pausa
+    Escribir "Inicio"
+    Esperar 1 Segundos
+    Escribir "Despues de un segundo"
+    Esperar 100 Milisegundos
+    Escribir "Despues de una pausa corta"
+FinAlgoritmo
+```
+
+Para evitar bloqueos accidentales, la app limita cada espera a un maximo de 60 segundos.
 
 ## Si, Sino y FinSi
 

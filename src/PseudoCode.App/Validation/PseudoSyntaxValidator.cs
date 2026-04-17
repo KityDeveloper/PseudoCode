@@ -21,7 +21,7 @@ internal sealed class PseudoSyntaxValidator
         for (var index = 0; index < lines.Length; index++)
         {
             var lineNumber = index + 1;
-            var line = RemoveComment(lines[index]).Trim();
+            var line = NormalizeLine(RemoveComment(lines[index]));
             if (line.Length == 0)
             {
                 continue;
@@ -76,13 +76,26 @@ internal sealed class PseudoSyntaxValidator
 
         if (_language.StartsWithKeyword(line, "write"))
         {
-            ValidateExpression(_language.RemoveKeywordPrefix(line, "write"), lineNumber, _language.Keyword("write"), diagnostics);
+            var payload = _language.RemoveKeywordPrefix(line, "write");
+            _ = TryRemoveTrailingKeyword(ref payload, _language.Keyword("withoutNewline"));
+            ValidateExpression(payload, lineNumber, _language.Keyword("write"), diagnostics);
             return;
         }
 
         if (_language.StartsWithKeyword(line, "read"))
         {
             ValidateIdentifierList(_language.RemoveKeywordPrefix(line, "read"), lineNumber, _language.Keyword("read"), diagnostics);
+            return;
+        }
+
+        if (IsClearScreen(line))
+        {
+            return;
+        }
+
+        if (_language.StartsWithKeyword(line, "wait"))
+        {
+            ValidateWait(_language.RemoveKeywordPrefix(line, "wait"), lineNumber, diagnostics);
             return;
         }
 
@@ -215,6 +228,22 @@ internal sealed class PseudoSyntaxValidator
         }
     }
 
+    private void ValidateWait(string payload, int lineNumber, List<string> diagnostics)
+    {
+        payload = payload.Trim();
+        _ = TryRemoveTrailingKeyword(ref payload, _language.Keyword("milliseconds")) ||
+            TryRemoveTrailingWord(ref payload, "Milisegundo") ||
+            TryRemoveTrailingWord(ref payload, "Milisegundos") ||
+            TryRemoveTrailingKeyword(ref payload, _language.Keyword("seconds")) ||
+            TryRemoveTrailingWord(ref payload, "Segundo") ||
+            TryRemoveTrailingWord(ref payload, "Segundos");
+
+        if (payload.Length == 0)
+        {
+            diagnostics.Add($"Linea {lineNumber}: '{_language.Keyword("wait")}' necesita una duracion. Causa: no hay tiempo indicado. Solucion: usa '{_language.Keyword("wait")} 1 {_language.Keyword("seconds")}'.");
+        }
+    }
+
     private void CloseBlock(int lineNumber, string expectedCloseRole, List<string> diagnostics, Stack<(string Name, string CloseRole, int Line)> blocks)
     {
         if (!blocks.TryPop(out var opened))
@@ -246,5 +275,42 @@ internal sealed class PseudoSyntaxValidator
         }
 
         return line;
+    }
+
+    private bool IsClearScreen(string text) =>
+        _language.IsKeyword(text, "clear") ||
+        text.Equals($"{_language.Keyword("clear")} {_language.Keyword("screen")}", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryRemoveTrailingKeyword(ref string text, string keyword) => TryRemoveTrailingWord(ref text, keyword);
+
+    private static bool TryRemoveTrailingWord(ref string text, string word)
+    {
+        text = text.Trim();
+        if (!text.EndsWith(word, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var start = text.Length - word.Length;
+        if (start > 0 && !char.IsWhiteSpace(text[start - 1]))
+        {
+            return false;
+        }
+
+        text = text[..start].TrimEnd();
+        return true;
+    }
+
+    private static string NormalizeLine(string line) => StripTrailingSemicolon(line.Trim());
+
+    private static string StripTrailingSemicolon(string text)
+    {
+        var inString = false;
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '"') inString = !inString;
+        }
+
+        return !inString && text.EndsWith(';') ? text[..^1].TrimEnd() : text;
     }
 }

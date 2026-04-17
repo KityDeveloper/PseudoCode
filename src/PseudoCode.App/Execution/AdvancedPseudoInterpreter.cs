@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using PseudoCode.App.Services;
 
 namespace PseudoCode.App;
@@ -17,6 +18,7 @@ internal sealed class AdvancedPseudoInterpreter
     private readonly List<DebugFrame> _debugFrames = [];
     private int _inputIndex;
     private string? _waitingInputVariable;
+    private bool _outputLineOpen;
 
     public AdvancedPseudoInterpreter(PseudoLanguageDefinition language)
     {
@@ -102,13 +104,14 @@ internal sealed class AdvancedPseudoInterpreter
         _output.Clear();
         _diagnostics.Clear();
         _waitingInputVariable = null;
+        _outputLineOpen = false;
         _inputIndex = 0;
     }
 
     private IReadOnlyList<Node> Parse(string source)
     {
         var lines = source.Replace("\r\n", "\n").Split('\n')
-            .Select((text, index) => new SourceLine(index + 1, RemoveComment(text).Trim()))
+            .Select((text, index) => new SourceLine(index + 1, NormalizeLine(RemoveComment(text))))
             .Where(line => line.Text.Length > 0)
             .ToArray();
         var index = 0;
@@ -170,13 +173,27 @@ internal sealed class AdvancedPseudoInterpreter
         if (_language.StartsWithKeyword(text, "write"))
         {
             index++;
-            return new Write(line.Number, SplitArguments(_language.RemoveKeywordPrefix(text, "write")));
+            var payload = _language.RemoveKeywordPrefix(text, "write");
+            var withoutNewline = TryRemoveTrailingKeyword(ref payload, _language.Keyword("withoutNewline"));
+            return new Write(line.Number, SplitArguments(payload), withoutNewline);
         }
 
         if (_language.StartsWithKeyword(text, "read"))
         {
             index++;
             return new Read(line.Number, SplitNames(_language.RemoveKeywordPrefix(text, "read")));
+        }
+
+        if (IsClearScreen(text))
+        {
+            index++;
+            return new Clear(line.Number);
+        }
+
+        if (_language.StartsWithKeyword(text, "wait"))
+        {
+            index++;
+            return ParseWait(line.Number, _language.RemoveKeywordPrefix(text, "wait"));
         }
 
         var ifMatch = Regex.Match(text, $@"^{_language.RegexKeyword("if")}\s+(.+)\s+{_language.RegexKeyword("then")}$", RegexOptions.IgnoreCase);
@@ -304,12 +321,13 @@ internal sealed class AdvancedPseudoInterpreter
                 else _variables[assign.Name] = EvaluateValue(assign.Expression, node.Line);
                 return;
             case Write write:
-                _output.Add(string.Concat(write.Expressions.Select(expression => FormatValue(EvaluateValue(expression, node.Line)))));
+                WriteOutput(string.Concat(write.Expressions.Select(expression => FormatValue(EvaluateValue(expression, node.Line)))), write.WithoutNewline);
                 return;
             case Read read:
                 foreach (var name in read.Names)
                 {
                     _output.Add($"? {name}:");
+                    _outputLineOpen = false;
                     if (_inputIndex >= _inputs.Count)
                     {
                         _waitingInputVariable = name;
@@ -318,7 +336,19 @@ internal sealed class AdvancedPseudoInterpreter
                     var input = _inputs[_inputIndex++];
                     _variables[name] = ParseInput(input);
                     _output.Add($"> {input}");
+                    _outputLineOpen = false;
                 }
+                return;
+            case Clear:
+                _output.Clear();
+                _outputLineOpen = false;
+                return;
+            case Wait wait:
+                var duration = Math.Max(0, ToNumber(EvaluateValue(wait.DurationExpression, node.Line)));
+                var milliseconds = wait.Unit.Equals("milliseconds", StringComparison.OrdinalIgnoreCase)
+                    ? duration
+                    : duration * 1000;
+                Thread.Sleep((int)Math.Min(milliseconds, 60000));
                 return;
             case If conditional:
                 ExecuteBlock(ToBoolean(EvaluateCondition(conditional.Condition, node.Line)) ? conditional.ThenBody : conditional.ElseBody);
@@ -471,6 +501,47 @@ internal sealed class AdvancedPseudoInterpreter
     {
         NormalizeDebugFrames();
         return new DebugStepResult(BuildResult(), _debugFrames.LastOrDefault()?.Current?.Line, isFinished || _debugFrames.Count == 0);
+    }
+
+    private Wait ParseWait(int lineNumber, string payload)
+    {
+        payload = payload.Trim();
+        var milliseconds = _language.Keyword("milliseconds");
+        var seconds = _language.Keyword("seconds");
+
+        if (TryRemoveTrailingKeyword(ref payload, milliseconds))
+        {
+            return new Wait(lineNumber, payload, "milliseconds");
+        }
+
+        if (TryRemoveTrailingWord(ref payload, "Milisegundo") ||
+            TryRemoveTrailingWord(ref payload, "Milisegundos"))
+        {
+            return new Wait(lineNumber, payload, "milliseconds");
+        }
+
+        if (TryRemoveTrailingKeyword(ref payload, seconds) ||
+            TryRemoveTrailingWord(ref payload, "Segundo") ||
+            TryRemoveTrailingWord(ref payload, "Segundos"))
+        {
+            return new Wait(lineNumber, payload, "seconds");
+        }
+
+        return new Wait(lineNumber, payload, "seconds");
+    }
+
+    private void WriteOutput(string text, bool withoutNewline)
+    {
+        if (_outputLineOpen && _output.Count > 0)
+        {
+            _output[^1] += text;
+        }
+        else
+        {
+            _output.Add(text);
+        }
+
+        _outputLineOpen = withoutNewline;
     }
 
     private object? EvaluateValue(string expression, int line)
@@ -639,6 +710,42 @@ internal sealed class AdvancedPseudoInterpreter
     private bool IsQuoted(string text) => text.Length >= 2 && text[0] == '"' && text[^1] == '"';
     private bool IsSwitchCase(string text) => text.EndsWith(':') && !IsOtherwise(text);
     private bool IsOtherwise(string text) => text.Equals(_language.Keyword("otherwise") + ":", StringComparison.OrdinalIgnoreCase) || text.Equals(_language.Keyword("otherwise"), StringComparison.OrdinalIgnoreCase);
+    private bool IsClearScreen(string text) =>
+        _language.IsKeyword(text, "clear") ||
+        text.Equals($"{_language.Keyword("clear")} {_language.Keyword("screen")}", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryRemoveTrailingKeyword(ref string text, string keyword) => TryRemoveTrailingWord(ref text, keyword);
+
+    private static bool TryRemoveTrailingWord(ref string text, string word)
+    {
+        text = text.Trim();
+        if (!text.EndsWith(word, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var start = text.Length - word.Length;
+        if (start > 0 && !char.IsWhiteSpace(text[start - 1]))
+        {
+            return false;
+        }
+
+        text = text[..start].TrimEnd();
+        return true;
+    }
+
+    private static string NormalizeLine(string line) => StripTrailingSemicolon(line.Trim());
+
+    private static string StripTrailingSemicolon(string text)
+    {
+        var inString = false;
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '"') inString = !inString;
+        }
+
+        return !inString && text.EndsWith(';') ? text[..^1].TrimEnd() : text;
+    }
 
     private static string RemoveComment(string line)
     {
@@ -664,8 +771,10 @@ internal sealed class AdvancedPseudoInterpreter
     private sealed record NoOp(int Line) : Node(Line);
     private sealed record Declare(int Line, IReadOnlyList<string> Names) : Node(Line);
     private sealed record Assign(int Line, string Name, string Expression) : Node(Line);
-    private sealed record Write(int Line, IReadOnlyList<string> Expressions) : Node(Line);
+    private sealed record Write(int Line, IReadOnlyList<string> Expressions, bool WithoutNewline) : Node(Line);
     private sealed record Read(int Line, IReadOnlyList<string> Names) : Node(Line);
+    private sealed record Clear(int Line) : Node(Line);
+    private sealed record Wait(int Line, string DurationExpression, string Unit) : Node(Line);
     private sealed record If(int Line, string Condition, IReadOnlyList<Node> ThenBody, IReadOnlyList<Node> ElseBody) : Node(Line);
     private sealed record While(int Line, string Condition, IReadOnlyList<Node> Body) : Node(Line);
     private sealed record For(int Line, string Variable, string Start, string End, IReadOnlyList<Node> Body) : Node(Line);

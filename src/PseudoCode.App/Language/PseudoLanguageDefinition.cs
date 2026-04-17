@@ -18,6 +18,11 @@ internal sealed class PseudoLanguageDefinition
         "true", "false", "and", "or", "not"
     ];
 
+    public static readonly string[] OptionalKeywordRoles =
+    [
+        "clear", "screen", "wait", "seconds", "milliseconds", "withoutNewline"
+    ];
+
     public string Id { get; init; } = DefaultDialectId;
     public string DisplayName { get; init; } = "PSeInt";
     public Dictionary<string, string> Keywords { get; init; } = new(StringComparer.OrdinalIgnoreCase);
@@ -102,7 +107,13 @@ internal sealed class PseudoLanguageDefinition
             ["false"] = "Falso",
             ["and"] = "Y",
             ["or"] = "O",
-            ["not"] = "NO"
+            ["not"] = "NO",
+            ["clear"] = "Borrar",
+            ["screen"] = "Pantalla",
+            ["wait"] = "Esperar",
+            ["seconds"] = "Segundos",
+            ["milliseconds"] = "Milisegundos",
+            ["withoutNewline"] = "Sin Saltar"
         };
 
         var types = new List<string> { "Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano" };
@@ -137,6 +148,13 @@ internal sealed class PseudoLanguageDefinition
                 diagnostics.Add($"Settings: falta la palabra requerida '{role}' en el dialecto '{dto.Id}'. Se uso PSeInt por defecto.");
                 return fallback;
             }
+        }
+
+        foreach (var role in OptionalKeywordRoles)
+        {
+            keywords[role] = dto.Keywords.TryGetValue(role, out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value.Trim()
+                : fallback.Keyword(role);
         }
 
         if (dto.Types.Count == 0 || dto.Types.Any(string.IsNullOrWhiteSpace))
@@ -196,7 +214,10 @@ internal sealed class PseudoLanguageDefinition
             new(keywords["algorithmStart"], $"{keywords["algorithmStart"]} MiPrograma\n    \n{keywords["algorithmEnd"]}", "Define el inicio y fin de un algoritmo.", true),
             new(keywords["declare"], $"{keywords["declare"]} variable {keywords["typeSeparator"]} {integerType}", "Declara una o varias variables.", true),
             new(keywords["write"], $"{keywords["write"]} \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
+            new($"{keywords["write"]} {keywords["withoutNewline"]}", $"{keywords["write"]} \"Mensaje\" {keywords["withoutNewline"]}", "Muestra texto sin saltar de linea.", true),
             new(keywords["read"], $"{keywords["read"]} variable", "Espera un valor en la consola antes de continuar.", true),
+            new(keywords["clear"], $"{keywords["clear"]} {keywords["screen"]}", "Limpia la salida.", true),
+            new(keywords["wait"], $"{keywords["wait"]} 1 {keywords["seconds"]}", "Pausa la ejecucion.", true),
             new(keywords["if"], $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["endIf"]}", "Bloque condicional.", true),
             new($"{keywords["if"]}/{keywords["else"]}", $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["else"]}\n    \n{keywords["endIf"]}", "Condicional con alternativa.", true),
             new(keywords["while"], $"{keywords["while"]} condicion {keywords["do"]}\n    \n{keywords["endWhile"]}", "Repite mientras se cumpla una condicion.", true),

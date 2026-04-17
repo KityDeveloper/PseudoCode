@@ -838,7 +838,7 @@ public partial class MainWindow : Window
                 visualTextEditor.Children.Add(BuildVisualSection("Keywords", "Cada rol tiene una sola palabra activa. Cambiarla reemplaza la anterior."));
                 if (root["keywords"] is JsonObject keywords)
                 {
-                    foreach (var keyword in PseudoLanguageDefinition.RequiredKeywordRoles)
+                    foreach (var keyword in PseudoLanguageDefinition.RequiredKeywordRoles.Concat(PseudoLanguageDefinition.OptionalKeywordRoles))
                     {
                         var value = keywords[keyword]?.GetValue<string>() ?? string.Empty;
                         visualTextEditor.Children.Add(BuildVisualTextField(KeywordDisplayName(keyword), $"keywords.{keyword}", value, next => SetJsonString(["keywords", keyword], next)));
@@ -1716,6 +1716,12 @@ public partial class MainWindow : Window
         "and" => "And",
         "or" => "Or",
         "not" => "Not",
+        "clear" => "Clear",
+        "screen" => "Screen",
+        "wait" => "Wait",
+        "seconds" => "Seconds",
+        "milliseconds" => "Milliseconds",
+        "withoutNewline" => "Without newline",
         _ => role
     };
 
@@ -3812,6 +3818,11 @@ public partial class MainWindow : Window
         var typeSeparator = language.Keyword("typeSeparator");
         var write = language.Keyword("write");
         var read = language.Keyword("read");
+        var clear = language.Keyword("clear");
+        var screen = language.Keyword("screen");
+        var wait = language.Keyword("wait");
+        var seconds = language.Keyword("seconds");
+        var withoutNewline = language.Keyword("withoutNewline");
         var integerType = FindLanguageType(language, "Entero", "Integer") ?? language.Types.FirstOrDefault() ?? "Entero";
         var textType = FindLanguageType(language, "Cadena", "String", "Texto") ?? integerType;
 
@@ -3850,6 +3861,18 @@ public partial class MainWindow : Window
 
     {read} numero
     {write} "Numero recibido: ", numero
+{endAlgorithm}
+"""),
+            new(
+                "Salida avanzada",
+                $"{withoutNewline} escribe sin cambiar de linea; {clear} {screen} limpia la salida y {wait} pausa la ejecucion.",
+                $"""
+{algorithm} SalidaAvanzada
+    {write} "Hola " {withoutNewline};
+    {write} "mundo"
+    {wait} 1 {seconds};
+    {clear} {screen}
+    {write} "Salida limpia"
 {endAlgorithm}
 """),
             new(
