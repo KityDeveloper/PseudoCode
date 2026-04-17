@@ -401,24 +401,33 @@ public partial class MainWindow : Window
         {
             Title = "Acerca de PseudoCode",
             Width = 420,
-            Height = 390,
+            Height = 520,
             MinWidth = 420,
-            MinHeight = 390,
+            MinHeight = 520,
             MaxWidth = 420,
-            MaxHeight = 390,
+            MaxHeight = 520,
             CanResize = false,
             CanMinimize = false,
             CanMaximize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Brush("PanelBackground"),
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png")))
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/logoPseudoCode.png")))
         };
 
-        var icon = new Image
+        var appIcon = new Image
         {
-            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png"))),
-            Width = 92,
-            Height = 92,
+            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/logoPseudoCode.png"))),
+            Width = 76,
+            Height = 76,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        var authorLogo = new Image
+        {
+            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/LogoKityDev.png"))),
+            Width = 72,
+            Height = 72,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -429,7 +438,7 @@ public partial class MainWindow : Window
             Margin = new Thickness(24),
             Children =
             {
-                icon,
+                appIcon,
                 new TextBlock
                 {
                     Text = AppInfoService.AppName,
@@ -445,9 +454,24 @@ public partial class MainWindow : Window
                     FontSize = 15,
                     HorizontalAlignment = HorizontalAlignment.Center
                 },
+                new Border
+                {
+                    Height = 1,
+                    Background = Brush("BorderBrushMuted"),
+                    Margin = new Thickness(0, 10, 0, 4)
+                },
                 new TextBlock
                 {
-                    Text = $"Autor: {AppInfoService.Author}",
+                    Text = "Autor",
+                    Foreground = Brush("TextPrimary"),
+                    FontSize = 17,
+                    FontWeight = FontWeight.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                },
+                authorLogo,
+                new TextBlock
+                {
+                    Text = AppInfoService.Author,
                     Foreground = Brush("TextSecondary"),
                     FontSize = 15,
                     HorizontalAlignment = HorizontalAlignment.Center
