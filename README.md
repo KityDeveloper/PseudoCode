@@ -22,27 +22,79 @@ El dialecto principal sigue el estilo de **PSeInt**, con editor moderno, multipl
 
 ## Capturas
 
-![PseudoCode](./docs/assets/screenshots/pseudoCode.png)
+Estas imagenes vienen de `docs/assets/screenshots`.
 
-> Placeholder: editor principal
+### Vista general
 
-![Editor principal](./docs/assets/screenshots/editor-principal.png)
+Editor principal con pestañas, explorador, panel de ayuda y area de salida.
 
-> Placeholder: ejecucion, salida y variables
+![Vista general](docs/assets/screenshots/pseudoCode.png)
 
-![Ejecucion, salida y variables](docs/assets/screenshots/ejecucion-salida-variables.png)
+### Editor principal
 
-> Placeholder: ayuda integrada
+Espacio de trabajo para escribir pseudocodigo, abrir varios archivos y ver ayuda contextual.
 
-![Ayuda integrada](docs/assets/screenshots/ayuda-integrada.png)
+![Editor principal](docs/assets/screenshots/editor-principal.png)
 
-> Placeholder: documentacion Markdown dentro de la app
+### Depuracion paso a paso
 
-![Documentacion integrada](docs/assets/screenshots/documentacion-integrada.png)
+Ejecucion controlada con avance por linea usando `F10`, resaltado del paso actual e inspeccion de variables.
 
-> Placeholder: configuracion de dialectos
+![Depuracion paso a paso](docs/assets/screenshots/depuracion_paso_a_paso.png)
 
-![Configuracion de dialectos](docs/assets/screenshots/configuracion-dialectos.png)
+### Modo claro
+
+Tema claro para trabajar con fondos mas luminosos sin perder resaltado de sintaxis.
+
+![Modo claro](docs/assets/screenshots/modo_claro.png)
+
+### Configuracion JSON
+
+Ayuda integrada para entender dialectos, settings y temas de sintaxis configurables.
+
+![Configuracion JSON](docs/assets/screenshots/ayuda_configuracion_json.png)
+
+### Documentacion integrada
+
+Documentos Markdown renderizados dentro de la app desde el menu de ayuda.
+
+![Documentacion integrada](docs/assets/screenshots/ayuda_documentacion.png)
+
+### Menu Archivo
+
+Accesos para crear, abrir, guardar y cerrar algoritmos.
+
+![Menu Archivo](docs/assets/screenshots/menu_archivo.png)
+
+### Menu Editar
+
+Comandos de edicion y acciones rapidas para trabajar con el codigo.
+
+![Menu Editar](docs/assets/screenshots/menu_editar.png)
+
+### Menu Ejecutar
+
+Opciones para ejecutar, depurar y controlar el flujo del algoritmo.
+
+![Menu Ejecutar](docs/assets/screenshots/menu_ejecutar.png)
+
+### Menu Configuracion
+
+Entrada para editar settings, temas de codigo fuente y dialectos directamente como JSON.
+
+![Menu Configuracion](docs/assets/screenshots/menu_configuracion.png)
+
+### Menu Ayuda
+
+Acceso a documentacion, notas de version, configuracion JSON y datos de la app.
+
+![Menu Ayuda](docs/assets/screenshots/menu_ayuda.png)
+
+### Acerca de
+
+Ventana con version, logo de la app, datos del autor y enlaces oficiales.
+
+![Acerca de PseudoCode](docs/assets/screenshots/acerca_de.png)
 
 ## Indice
 
