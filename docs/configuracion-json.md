@@ -73,6 +73,8 @@ La ventana de temas incluye dos formas de editar:
 
 El panel visual actualiza el JSON automaticamente, asi que puedes ajustar colores sin escribir cada propiedad a mano.
 
+La ventana de settings y dialectos tambien incluye un panel visual por secciones con campos de texto. Al editar un campo, el JSON se actualiza automaticamente; si necesitas algo avanzado, puedes seguir editando el JSON directo.
+
 Tambien puedes abrir **Configuracion > Carpeta de configuracion** para:
 
 - Ver el dialecto activo.

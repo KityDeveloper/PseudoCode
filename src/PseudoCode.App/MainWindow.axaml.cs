@@ -393,7 +393,7 @@ public partial class MainWindow : Window
         };
         editor.Options.ConvertTabsToSpaces = true;
         editor.Options.IndentationSize = 2;
-        editor.TextArea.TextView.LineTransformers.Add(new JsonSyntaxColorizer());
+        editor.TextArea.TextView.LineTransformers.Add(new JsonSyntaxColorizer(_isLightTheme));
 
         var isSyncingVisualEditor = false;
         var selectedColorKey = "keyword";
@@ -416,18 +416,34 @@ public partial class MainWindow : Window
             Margin = new Thickness(12),
             IsVisible = IsThemeTarget(selectedTarget)
         };
+        var visualTextEditor = new StackPanel
+        {
+            Spacing = 16,
+            Margin = new Thickness(16, 14),
+            IsVisible = !IsThemeTarget(selectedTarget)
+        };
+        var visualEditorHost = new Grid
+        {
+            Children =
+            {
+                visualThemeEditor,
+                visualTextEditor
+            }
+        };
 
         foreach (var colorKey in ThemeColorKeys)
         {
             var label = new TextBlock
             {
-                Text = colorKey,
-                Foreground = Brush("TextSecondary"),
-                VerticalAlignment = VerticalAlignment.Center
+                Text = ThemeColorDisplayName(colorKey),
+                Foreground = Brush("TextPrimary"),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.NoWrap
             };
+            ToolTip.SetTip(label, colorKey);
             var input = new TextBox
             {
-                MinWidth = 92,
+                Width = 118,
                 Text = "#000000",
                 FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
                 FontSize = 12,
@@ -447,7 +463,7 @@ public partial class MainWindow : Window
             var selectButton = new Button
             {
                 Content = "Editar",
-                Padding = new Thickness(8, 3),
+                Padding = new Thickness(10, 3),
                 Classes = { "command" }
             };
 
@@ -474,8 +490,8 @@ public partial class MainWindow : Window
 
             visualThemeEditor.Children.Add(new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("*,96,34,Auto"),
-                ColumnSpacing = 8,
+                ColumnDefinitions = new ColumnDefinitions("150,118,34,Auto"),
+                ColumnSpacing = 10,
                 Children =
                 {
                     label,
@@ -510,6 +526,7 @@ public partial class MainWindow : Window
             if (!isSyncingVisualEditor)
             {
                 RefreshVisualThemeEditor();
+                RebuildTextSettingsEditor();
             }
         };
 
@@ -519,7 +536,10 @@ public partial class MainWindow : Window
             fileLabel.Text = target.RelativePath;
             editor.Text = AppSettingsService.ReadOrTemplate(target);
             visualThemeEditor.IsVisible = IsThemeTarget(target);
+            visualTextEditor.IsVisible = !IsThemeTarget(target);
+            EnsureThemeDefaultsFromTemplate();
             RefreshVisualThemeEditor();
+            RebuildTextSettingsEditor();
             status.Text = File.Exists(target.FullPath)
                 ? $"Editando copia de usuario: {target.FullPath}"
                 : "Este archivo aun no existe en tu perfil. Guardar creara una copia editable.";
@@ -611,6 +631,151 @@ public partial class MainWindow : Window
             }
             isSyncingVisualEditor = false;
         }
+
+        void EnsureThemeDefaultsFromTemplate()
+        {
+            if (!IsThemeTarget(selectedTarget))
+            {
+                return;
+            }
+
+            var text = editor.Text ?? string.Empty;
+            var changed = false;
+            foreach (var colorKey in ThemeColorKeys)
+            {
+                if (TryGetThemeColor(text, colorKey, out _))
+                {
+                    continue;
+                }
+
+                var fallback = TryGetThemeColor(selectedTarget.Template, colorKey, out var templateValue)
+                    ? NormalizeHex(templateValue)
+                    : DefaultThemeColor(colorKey);
+
+                if (fallback is null)
+                {
+                    continue;
+                }
+
+                var updated = TrySetThemeColor(text, colorKey, fallback);
+                if (updated is null)
+                {
+                    continue;
+                }
+
+                text = updated;
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
+            isSyncingVisualEditor = true;
+            editor.Text = text;
+            isSyncingVisualEditor = false;
+        }
+
+        void RebuildTextSettingsEditor()
+        {
+            if (IsThemeTarget(selectedTarget) || isSyncingVisualEditor)
+            {
+                return;
+            }
+
+            visualTextEditor.Children.Clear();
+            if (!TryParseJsonObject(editor.Text ?? string.Empty, out var root))
+            {
+                visualTextEditor.Children.Add(new TextBlock
+                {
+                    Text = "JSON invalido. Corrige el texto para volver al editor visual.",
+                    Foreground = Brush("TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap
+                });
+                return;
+            }
+
+            if (selectedTarget.RelativePath.Equals("default-settings.json", StringComparison.OrdinalIgnoreCase))
+            {
+                visualTextEditor.Children.Add(BuildVisualSection("Lenguaje", "Selecciona el dialecto activo que usara editor, ayuda, validacion y ejecucion."));
+                visualTextEditor.Children.Add(BuildVisualTextField("Dialect active", "language.activeDialect", GetJsonString(root, "language", "activeDialect"), value => SetJsonString(["language", "activeDialect"], value)));
+                visualTextEditor.Children.Add(BuildVisualSection("Editor", "Selecciona los temas de sintaxis por modo de interfaz."));
+                visualTextEditor.Children.Add(BuildVisualTextField("Dark syntax theme", "editor.syntaxThemeDark", GetJsonString(root, "editor", "syntaxThemeDark"), value => SetJsonString(["editor", "syntaxThemeDark"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Light syntax theme", "editor.syntaxThemeLight", GetJsonString(root, "editor", "syntaxThemeLight"), value => SetJsonString(["editor", "syntaxThemeLight"], value)));
+                return;
+            }
+
+            if (selectedTarget.RelativePath.StartsWith("dialects/", StringComparison.OrdinalIgnoreCase))
+            {
+                visualTextEditor.Children.Add(BuildVisualSection("Dialect", "Datos generales del dialecto."));
+                visualTextEditor.Children.Add(BuildVisualTextField("ID", "id", GetJsonString(root, "id"), value => SetJsonString(["id"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Display name", "displayName", GetJsonString(root, "displayName"), value => SetJsonString(["displayName"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Types", "types", string.Join(", ", GetJsonStringArray(root, "types")), value => SetJsonArray(["types"], value)));
+
+                visualTextEditor.Children.Add(BuildVisualSection("Keywords", "Cada rol tiene una sola palabra activa. Cambiarla reemplaza la anterior."));
+                if (root["keywords"] is JsonObject keywords)
+                {
+                    foreach (var keyword in PseudoLanguageDefinition.RequiredKeywordRoles)
+                    {
+                        var value = keywords[keyword]?.GetValue<string>() ?? string.Empty;
+                        visualTextEditor.Children.Add(BuildVisualTextField(KeywordDisplayName(keyword), $"keywords.{keyword}", value, next => SetJsonString(["keywords", keyword], next)));
+                    }
+                }
+                else
+                {
+                    visualTextEditor.Children.Add(new TextBlock
+                    {
+                        Text = "No hay seccion keywords. Puedes crearla desde el JSON.",
+                        Foreground = Brush("TextSecondary"),
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                }
+                return;
+            }
+
+            visualTextEditor.Children.Add(new TextBlock
+            {
+                Text = "Este archivo se edita como JSON.",
+                Foreground = Brush("TextSecondary"),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            void SetJsonString(string[] path, string value)
+            {
+                var updated = TrySetJsonString(editor.Text ?? string.Empty, path, value);
+                if (updated is null)
+                {
+                    status.Text = $"No pude actualizar {string.Join('.', path)}.";
+                    return;
+                }
+
+                isSyncingVisualEditor = true;
+                editor.Text = updated;
+                isSyncingVisualEditor = false;
+                RebuildTextSettingsEditor();
+            }
+
+            void SetJsonArray(string[] path, string value)
+            {
+                var items = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var updated = TrySetJsonStringArray(editor.Text ?? string.Empty, path, items);
+                if (updated is null)
+                {
+                    status.Text = $"No pude actualizar {string.Join('.', path)}.";
+                    return;
+                }
+
+                isSyncingVisualEditor = true;
+                editor.Text = updated;
+                isSyncingVisualEditor = false;
+                RebuildTextSettingsEditor();
+            }
+        }
+
+        EnsureThemeDefaultsFromTemplate();
+        RefreshVisualThemeEditor();
+        RebuildTextSettingsEditor();
 
         var targetList = new StackPanel
         {
@@ -754,7 +919,7 @@ public partial class MainWindow : Window
             Background = Brush("PanelBackground"),
             BorderBrush = Brush("BorderBrushMuted"),
             BorderThickness = new Thickness(1, 0, 0, 0),
-            Child = new ScrollViewer { Content = visualThemeEditor }
+            Child = new ScrollViewer { Content = visualEditorHost }
         };
         Grid.SetColumn(visualThemePanel, 2);
         Grid.SetRow(visualThemePanel, 1);
@@ -796,15 +961,15 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Title = title,
-            Width = 980,
+            Width = 1120,
             Height = 720,
-            MinWidth = 760,
+            MinWidth = 940,
             MinHeight = 520,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Brush("EditorBackground"),
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("230,*,300"),
+                ColumnDefinitions = new ColumnDefinitions("230,*,390"),
                 RowDefinitions = new RowDefinitions("Auto,*,Auto"),
                 Children =
                 {
@@ -984,6 +1149,64 @@ public partial class MainWindow : Window
         window.Activate();
     }
 
+    private TextBlock BuildVisualSection(string title, string description) => new()
+    {
+        Text = $"{title}\n{description}",
+        Foreground = Brush("TextPrimary"),
+        FontWeight = FontWeight.SemiBold,
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 4, 0, 0)
+    };
+
+    private Grid BuildVisualTextField(string label, string settingPath, string value, Action<string> commit)
+    {
+        var labelBlock = new TextBlock
+        {
+            Text = label,
+            Foreground = Brush("TextPrimary"),
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        };
+        var pathBlock = new TextBlock
+        {
+            Text = settingPath,
+            Foreground = Brush("TextSecondary"),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap
+        };
+        var input = new TextBox
+        {
+            Text = value,
+            Background = Brush("InsetBackground"),
+            Foreground = Brush("TextPrimary"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+            FontSize = 13,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        input.LostFocus += (_, _) => commit(input.Text ?? string.Empty);
+        input.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                commit(input.Text ?? string.Empty);
+                args.Handled = true;
+            }
+        };
+
+        return new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
+            RowSpacing = 4,
+            Children =
+            {
+                labelBlock,
+                WithGridRow(pathBlock, 1),
+                WithGridRow(input, 2)
+            }
+        };
+    }
+
     private static T WithGridColumn<T>(T control, int column)
         where T : Control
     {
@@ -991,8 +1214,94 @@ public partial class MainWindow : Window
         return control;
     }
 
+    private static T WithGridRow<T>(T control, int row)
+        where T : Control
+    {
+        Grid.SetRow(control, row);
+        return control;
+    }
+
     private static bool IsThemeTarget(JsonConfigTarget target) =>
         target.RelativePath.StartsWith("syntax-themes/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryParseJsonObject(string json, out JsonObject root)
+    {
+        try
+        {
+            root = JsonNode.Parse(json) as JsonObject ?? [];
+            return true;
+        }
+        catch
+        {
+            root = [];
+            return false;
+        }
+    }
+
+    private static string GetJsonString(JsonObject root, params string[] path)
+    {
+        JsonNode? node = root;
+        foreach (var segment in path)
+        {
+            node = node?[segment];
+        }
+
+        return node?.GetValue<string>() ?? string.Empty;
+    }
+
+    private static IEnumerable<string> GetJsonStringArray(JsonObject root, params string[] path)
+    {
+        JsonNode? node = root;
+        foreach (var segment in path)
+        {
+            node = node?[segment];
+        }
+
+        return node is JsonArray array
+            ? array.Select(item => item?.GetValue<string>() ?? string.Empty).Where(item => item.Length > 0)
+            : [];
+    }
+
+    private static string? TrySetJsonString(string json, IReadOnlyList<string> path, string value)
+    {
+        if (!TryParseJsonObject(json, out var root) || path.Count == 0)
+        {
+            return null;
+        }
+
+        var parent = EnsureJsonParent(root, path);
+        parent[path[^1]] = value;
+        return root.ToJsonString(JsonWriteOptions) + Environment.NewLine;
+    }
+
+    private static string? TrySetJsonStringArray(string json, IReadOnlyList<string> path, IEnumerable<string> values)
+    {
+        if (!TryParseJsonObject(json, out var root) || path.Count == 0)
+        {
+            return null;
+        }
+
+        var parent = EnsureJsonParent(root, path);
+        parent[path[^1]] = new JsonArray(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
+        return root.ToJsonString(JsonWriteOptions) + Environment.NewLine;
+    }
+
+    private static JsonObject EnsureJsonParent(JsonObject root, IReadOnlyList<string> path)
+    {
+        var current = root;
+        for (var index = 0; index < path.Count - 1; index++)
+        {
+            if (current[path[index]] is not JsonObject next)
+            {
+                next = [];
+                current[path[index]] = next;
+            }
+
+            current = next;
+        }
+
+        return current;
+    }
 
     private static bool TryGetThemeColor(string json, string colorKey, out string value)
     {
@@ -1066,6 +1375,66 @@ public partial class MainWindow : Window
 
     private static string ToHex(Color color) =>
         $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    private static string ThemeColorDisplayName(string colorKey) => colorKey switch
+    {
+        "keyword" => "Keyword",
+        "type" => "Type",
+        "string" => "String",
+        "number" => "Number",
+        "operator" => "Operator",
+        "comment" => "Comment",
+        "blockBackground" => "Block background",
+        "diagnosticUnderline" => "Diagnostic underline",
+        "editorBackground" => "Editor background",
+        _ => colorKey
+    };
+
+    private static string KeywordDisplayName(string role) => role switch
+    {
+        "algorithmStart" => "Algorithm start",
+        "algorithmEnd" => "Algorithm end",
+        "processStart" => "Process start",
+        "processEnd" => "Process end",
+        "declare" => "Declare",
+        "typeSeparator" => "Type separator",
+        "write" => "Write",
+        "read" => "Read",
+        "if" => "If",
+        "then" => "Then",
+        "else" => "Else",
+        "endIf" => "End if",
+        "while" => "While",
+        "do" => "Do",
+        "endWhile" => "End while",
+        "for" => "For",
+        "until" => "Until",
+        "step" => "Step",
+        "endFor" => "End for",
+        "switch" => "Switch",
+        "otherwise" => "Otherwise",
+        "endSwitch" => "End switch",
+        "true" => "True",
+        "false" => "False",
+        "and" => "And",
+        "or" => "Or",
+        "not" => "Not",
+        _ => role
+    };
+
+    private static string? DefaultThemeColor(string colorKey) => colorKey switch
+    {
+        "keyword" => "#5EA1FF",
+        "type" => "#4EC9B0",
+        "string" => "#CE9178",
+        "number" => "#B5CEA8",
+        "operator" => "#DCDCAA",
+        "comment" => "#6A9955",
+        "blockBackground" => "#1F3B4D",
+        "diagnosticUnderline" => "#FF4D4D",
+        "editorBackground" => "#1E1E1E",
+        _ => null
+    };
 
     private void ReloadRuntimeSettings()
     {

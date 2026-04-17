@@ -13,11 +13,20 @@ internal sealed class JsonSyntaxColorizer : DocumentColorizingTransformer
     private static readonly Regex KeywordLiteral = new(@"\b(true|false|null)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex Punctuation = new(@"[{}\[\]:,]", RegexOptions.Compiled);
 
-    private readonly IBrush _propertyBrush = new SolidColorBrush(Color.Parse("#9CDCFE"));
-    private readonly IBrush _stringBrush = new SolidColorBrush(Color.Parse("#CE9178"));
-    private readonly IBrush _numberBrush = new SolidColorBrush(Color.Parse("#B5CEA8"));
-    private readonly IBrush _keywordBrush = new SolidColorBrush(Color.Parse("#569CD6"));
-    private readonly IBrush _punctuationBrush = new SolidColorBrush(Color.Parse("#D4D4D4"));
+    private readonly IBrush _propertyBrush;
+    private readonly IBrush _stringBrush;
+    private readonly IBrush _numberBrush;
+    private readonly IBrush _keywordBrush;
+    private readonly IBrush _punctuationBrush;
+
+    public JsonSyntaxColorizer(bool isLightTheme)
+    {
+        _propertyBrush = Brush(isLightTheme ? "#0451A5" : "#9CDCFE");
+        _stringBrush = Brush(isLightTheme ? "#A31515" : "#CE9178");
+        _numberBrush = Brush(isLightTheme ? "#098658" : "#B5CEA8");
+        _keywordBrush = Brush(isLightTheme ? "#0000FF" : "#569CD6");
+        _punctuationBrush = Brush(isLightTheme ? "#24292F" : "#D4D4D4");
+    }
 
     protected override void ColorizeLine(DocumentLine line)
     {
@@ -39,4 +48,6 @@ internal sealed class JsonSyntaxColorizer : DocumentColorizingTransformer
             });
         }
     }
+
+    private static SolidColorBrush Brush(string color) => new(Color.Parse(color));
 }
