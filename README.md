@@ -124,6 +124,7 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 - Depuracion paso a paso con `F10`.
 - Diagnosticos y errores subrayados en rojo.
 - Tabs con multiples archivos.
+- Documentos recientes desde el menu Archivo.
 - Paneles redimensionables.
 - Lista de archivos abiertos.
 - Ayuda rapida integrada.

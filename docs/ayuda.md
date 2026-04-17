@@ -32,6 +32,7 @@ FinAlgoritmo
 
 - **Nuevo algoritmo** crea un archivo nuevo en blanco con estructura minima.
 - **Abrir** permite cargar archivos `.psc`, `.pse` o `.txt`.
+- **Documentos recientes** abre otra vez los ultimos archivos usados.
 - **Guardar** guarda el archivo activo.
 - **Cerrar archivo** pregunta si quieres guardar cuando hay cambios pendientes.
 

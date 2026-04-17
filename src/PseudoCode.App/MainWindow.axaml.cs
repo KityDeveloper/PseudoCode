@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private CommandInfo[] _completionItems;
     private CommandInfo[] _quickTemplates;
     private HelpTopic[] _helpTopics;
+    private List<RecentDocumentInfo> _recentDocuments;
     private OpenDocument? _currentDocument;
     private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
@@ -54,10 +55,12 @@ public partial class MainWindow : Window
         _completionItems = _language.Snippets.ToArray();
         _quickTemplates = _language.BuildQuickTemplates().ToArray();
         _helpTopics = BuildDefaultHelpTopics(_language);
+        _recentDocuments = RecentDocumentsService.Load(_runtimeSettings.UserSettingsPath);
         InitializeComponent();
         ConfigureEditor();
         BuildEditorTools();
         BuildHelpTopics();
+        RenderRecentDocumentsMenu();
         DragDrop.SetAllowDrop(this, true);
         DragDrop.SetAllowDrop(EditorTextBox, true);
         AddHandler(DragDrop.DragOverEvent, Editor_DragOver);
@@ -910,6 +913,7 @@ public partial class MainWindow : Window
         await using var writer = new StreamWriter(stream, Encoding.UTF8);
         await writer.WriteAsync(document.Text);
         document.HasUnsavedChanges = false;
+        AddRecentDocument(file.Path.LocalPath, file.Name);
         RenderOpenDocuments();
         UpdateWindowState($"Guardado: {file.Name}");
         return true;
@@ -1071,6 +1075,7 @@ public partial class MainWindow : Window
             existingDocument.Text = text;
             existingDocument.HasUnsavedChanges = false;
             SwitchDocument(existingDocument);
+            AddRecentDocument(file.Path.LocalPath, file.Name);
             UpdateWindowState($"Abierto: {file.Name}");
             return;
         }
@@ -1083,7 +1088,88 @@ public partial class MainWindow : Window
 
         _openDocuments.Add(document);
         SwitchDocument(document);
+        AddRecentDocument(file.Path.LocalPath, file.Name);
         UpdateWindowState($"Abierto: {file.Name}");
+    }
+
+    private async Task OpenRecentDocumentAsync(RecentDocumentInfo recent)
+    {
+        if (!File.Exists(recent.Path))
+        {
+            _recentDocuments = RecentDocumentsService.Remove(_runtimeSettings.UserSettingsPath, _recentDocuments, recent.Path);
+            RenderRecentDocumentsMenu();
+            UpdateWindowState($"Reciente no encontrado: {recent.DisplayName}");
+            return;
+        }
+
+        var file = await StorageProvider.TryGetFileFromPathAsync(new Uri(recent.Path));
+        if (file is null)
+        {
+            _recentDocuments = RecentDocumentsService.Remove(_runtimeSettings.UserSettingsPath, _recentDocuments, recent.Path);
+            RenderRecentDocumentsMenu();
+            UpdateWindowState($"No pude abrir reciente: {recent.DisplayName}");
+            return;
+        }
+
+        await LoadFileAsync(file);
+    }
+
+    private void AddRecentDocument(string path, string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        _recentDocuments = RecentDocumentsService.Add(_runtimeSettings.UserSettingsPath, _recentDocuments, path, displayName);
+        RenderRecentDocumentsMenu();
+    }
+
+    private void RenderRecentDocumentsMenu()
+    {
+        if (RecentFilesMenu is null)
+        {
+            return;
+        }
+
+        var items = new List<Control>();
+        if (_recentDocuments.Count == 0)
+        {
+            items.Add(new MenuItem
+            {
+                Header = "Sin documentos recientes",
+                IsEnabled = false
+            });
+        }
+        else
+        {
+            foreach (var recent in _recentDocuments)
+            {
+                var item = new MenuItem
+                {
+                    Header = recent.DisplayName
+                };
+                ToolTip.SetTip(item, recent.Path);
+                item.Click += async (_, _) => await OpenRecentDocumentAsync(recent);
+                items.Add(item);
+            }
+
+            items.Add(new Separator());
+            var clearItem = new MenuItem
+            {
+                Header = "Limpiar recientes"
+            };
+            clearItem.Click += (_, _) =>
+            {
+                RecentDocumentsService.Clear(_runtimeSettings.UserSettingsPath);
+                _recentDocuments.Clear();
+                RenderRecentDocumentsMenu();
+                UpdateWindowState("Documentos recientes limpiados");
+            };
+            items.Add(clearItem);
+        }
+
+        RecentFilesMenu.ItemsSource = items;
     }
 
     private void SendConsoleInput()
@@ -1241,7 +1327,7 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
         _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer(palette.DiagnosticUnderlineBrush);
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
-        _debugLineRenderer = new DebugLineRenderer(new SolidColorBrush(Color.Parse("#2A5A2A")));
+        _debugLineRenderer = new DebugLineRenderer(BuildDebugLineBrush(palette));
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_debugLineRenderer);
         ApplyEditorTheme(DarkTheme, palette);
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
@@ -1903,11 +1989,26 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.CurrentLineBorder = new Pen(BrushFromTheme(colors, "BorderBrushMuted"), 1);
         _colorizer?.SetPalette(syntaxPalette);
         _diagnosticUnderlineRenderer?.SetBrush(syntaxPalette.DiagnosticUnderlineBrush);
+        _debugLineRenderer?.SetBrush(BuildDebugLineBrush(syntaxPalette));
         EditorTextBox.TextArea.TextView.Redraw();
     }
 
     private static SolidColorBrush BrushFromTheme(IReadOnlyDictionary<string, string> colors, string key) =>
         new(Color.Parse(colors[key]));
+
+    private static SolidColorBrush BuildDebugLineBrush(PseudoCodeColorPalette syntaxPalette)
+    {
+        if (syntaxPalette.EditorBackgroundBrush is not SolidColorBrush background)
+        {
+            return new SolidColorBrush(Color.FromArgb(70, 76, 175, 80));
+        }
+
+        var color = background.Color;
+        var luminance = (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255;
+        return luminance > 0.55
+            ? new SolidColorBrush(Color.FromArgb(45, 76, 175, 80))
+            : new SolidColorBrush(Color.FromArgb(85, 76, 175, 80));
+    }
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
 

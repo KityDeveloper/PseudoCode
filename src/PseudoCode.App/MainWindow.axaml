@@ -68,6 +68,8 @@
             <MenuItem Header="Archivo">
               <MenuItem Header="Nuevo algoritmo" Click="NewFile_Click" />
               <MenuItem Header="Abrir..." Click="OpenFile_Click" />
+              <MenuItem x:Name="RecentFilesMenu" Header="Documentos recientes" />
+              <Separator />
               <MenuItem Header="Guardar" Click="SaveFile_Click" />
               <MenuItem Header="Cerrar archivo" Click="CloseFile_Click" />
             </MenuItem>

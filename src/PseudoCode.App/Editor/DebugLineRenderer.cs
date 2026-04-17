@@ -6,7 +6,7 @@ namespace PseudoCode.App;
 
 internal sealed class DebugLineRenderer : IBackgroundRenderer
 {
-    private readonly IBrush _brush;
+    private IBrush _brush;
     private int? _lineNumber;
 
     public DebugLineRenderer(IBrush brush)
@@ -19,6 +19,11 @@ internal sealed class DebugLineRenderer : IBackgroundRenderer
     public void SetLine(int? lineNumber)
     {
         _lineNumber = lineNumber > 0 ? lineNumber : null;
+    }
+
+    public void SetBrush(IBrush brush)
+    {
+        _brush = brush;
     }
 
     public void Draw(TextView textView, DrawingContext drawingContext)
