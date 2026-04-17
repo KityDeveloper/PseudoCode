@@ -436,7 +436,10 @@ public partial class MainWindow : Window
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
         };
         var codePreviewColorizer = new PseudoCodeColorizer(_language, _runtimeSettings.DarkSyntaxTheme.ToPalette());
+        var codePreviewDiagnosticRenderer = new DiagnosticUnderlineRenderer(_runtimeSettings.DarkSyntaxTheme.ToPalette().DiagnosticUnderlineBrush);
+        codePreviewDiagnosticRenderer.SetLines([4]);
         codePreview.TextArea.TextView.LineTransformers.Add(codePreviewColorizer);
+        codePreview.TextArea.TextView.BackgroundRenderers.Add(codePreviewDiagnosticRenderer);
 
         var codePreviewTitle = new TextBlock
         {
@@ -485,7 +488,7 @@ public partial class MainWindow : Window
             IsColorComponentsVisible = false,
             IsAccentColorsVisible = true,
             IsColorPreviewVisible = true,
-            Height = 260
+            Height = 320
         };
 
         var visualThemeEditor = new StackPanel
@@ -588,7 +591,15 @@ public partial class MainWindow : Window
             Foreground = Brush("TextPrimary"),
             Margin = new Thickness(0, 8, 0, 0)
         });
+        visualThemeEditor.Children.Add(new TextBlock
+        {
+            Text = "Tambien puedes escribir el color como #RRGGBB o usar un color rapido.",
+            Foreground = Brush("TextSecondary"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12
+        });
         visualThemeEditor.Children.Add(colorPicker);
+        visualThemeEditor.Children.Add(BuildQuickColorPalette(color => SetThemeColor(selectedColorKey, color)));
 
         colorPicker.ColorChanged += (_, args) =>
         {
@@ -877,6 +888,8 @@ public partial class MainWindow : Window
             codePreview.Text = BuildPreviewCode(previewLanguage);
             codePreviewColorizer.SetLanguage(previewLanguage);
             codePreviewColorizer.SetPalette(palette);
+            codePreviewDiagnosticRenderer.SetBrush(palette.DiagnosticUnderlineBrush);
+            codePreviewDiagnosticRenderer.SetLines([4]);
             codePreview.Background = palette.EditorBackgroundBrush;
             codePreview.TextArea.Background = palette.EditorBackgroundBrush;
             codePreview.Foreground = BuildReadableTextBrush(palette.EditorBackgroundBrush);
@@ -1365,6 +1378,78 @@ public partial class MainWindow : Window
                 WithGridRow(input, 2)
             }
         };
+    }
+
+    private StackPanel BuildQuickColorPalette(Action<string> applyColor)
+    {
+        var colors = new (string Label, string Hex)[]
+        {
+            ("Negro", "#000000"),
+            ("Blanco", "#FFFFFF"),
+            ("Gris 900", "#111827"),
+            ("Gris 700", "#374151"),
+            ("Gris 300", "#D1D5DB"),
+            ("Rojo", "#EF4444"),
+            ("Verde", "#22C55E"),
+            ("Azul", "#3B82F6"),
+            ("Amarillo", "#FACC15"),
+            ("Morado", "#8B5CF6")
+        };
+
+        var panel = new StackPanel
+        {
+            Spacing = 8
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Colores rapidos",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = Brush("TextPrimary")
+        });
+
+        var wrap = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal
+        };
+
+        foreach (var (label, hex) in colors)
+        {
+            var button = new Button
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    Children =
+                    {
+                        new Border
+                        {
+                            Width = 18,
+                            Height = 18,
+                            CornerRadius = new CornerRadius(3),
+                            BorderBrush = Brush("BorderBrushMuted"),
+                            BorderThickness = new Thickness(1),
+                            Background = new SolidColorBrush(Color.Parse(hex))
+                        },
+                        new TextBlock
+                        {
+                            Text = label,
+                            Foreground = Brush("TextPrimary"),
+                            VerticalAlignment = VerticalAlignment.Center
+                        }
+                    }
+                },
+                Classes = { "command" },
+                Padding = new Thickness(8, 4),
+                Margin = new Thickness(0, 0, 6, 6)
+            };
+            ToolTip.SetTip(button, hex);
+            button.Click += (_, _) => applyColor(hex);
+            wrap.Children.Add(button);
+        }
+
+        panel.Children.Add(wrap);
+        return panel;
     }
 
     private static T WithGridColumn<T>(T control, int column)
