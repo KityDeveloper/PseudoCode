@@ -11,6 +11,7 @@ internal sealed class AdvancedPseudoInterpreter
     private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private const int MaxExecutionSteps = 100000;
     private const int MaxOutputLines = 5000;
+    private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(50);
     private readonly PseudoLanguageDefinition _language;
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
@@ -26,25 +27,34 @@ internal sealed class AdvancedPseudoInterpreter
     private bool _outputLimitReported;
     private CancellationToken _cancellationToken;
     private ManualResetEventSlim? _pauseGate;
+    private Action<ExecutionResult>? _progressReporter;
+    private DateTime _lastProgressReport = DateTime.MinValue;
 
     public AdvancedPseudoInterpreter(PseudoLanguageDefinition language)
     {
         _language = language;
     }
 
-    public ExecutionResult Start(string source, CancellationToken cancellationToken = default, ManualResetEventSlim? pauseGate = null)
+    public ExecutionResult Start(
+        string source,
+        CancellationToken cancellationToken = default,
+        ManualResetEventSlim? pauseGate = null,
+        Action<ExecutionResult>? progressReporter = null)
     {
         _inputs.Clear();
         ResetExecutionState();
         _cancellationToken = cancellationToken;
         _pauseGate = pauseGate;
+        _progressReporter = progressReporter;
         _program = Parse(source);
         if (_diagnostics.Count > 0)
         {
+            ReportProgress(force: true);
             return BuildResult();
         }
 
         ExecuteBlock(_program);
+        ReportProgress(force: true);
         return BuildResult();
     }
 
@@ -120,6 +130,8 @@ internal sealed class AdvancedPseudoInterpreter
         _inputIndex = 0;
         _cancellationToken = default;
         _pauseGate = null;
+        _progressReporter = null;
+        _lastProgressReport = DateTime.MinValue;
     }
 
     private IReadOnlyList<Node> Parse(string source)
@@ -370,12 +382,14 @@ internal sealed class AdvancedPseudoInterpreter
                 _output.Clear();
                 _outputLineOpen = false;
                 _outputLimitReported = false;
+                ReportProgress();
                 return;
             case Wait wait:
                 var duration = Math.Max(0, ToNumber(EvaluateValue(wait.DurationExpression, node.Line)));
                 var milliseconds = wait.Unit.Equals("milliseconds", StringComparison.OrdinalIgnoreCase)
                     ? duration
                     : duration * 1000;
+                ReportProgress(force: true);
                 WaitWithControl(milliseconds, node.Line);
                 return;
             case If conditional:
@@ -570,6 +584,7 @@ internal sealed class AdvancedPseudoInterpreter
         }
 
         _outputLineOpen = withoutNewline;
+        ReportProgress();
     }
 
     private bool CheckExecutionControl(int line)
@@ -639,6 +654,24 @@ internal sealed class AdvancedPseudoInterpreter
         }
 
         _output.Add(text);
+        ReportProgress();
+    }
+
+    private void ReportProgress(bool force = false)
+    {
+        if (_progressReporter is null)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (!force && now - _lastProgressReport < ProgressInterval)
+        {
+            return;
+        }
+
+        _lastProgressReport = now;
+        _progressReporter(BuildResult());
     }
 
     private object? EvaluateValue(string expression, int line)
@@ -676,8 +709,43 @@ internal sealed class AdvancedPseudoInterpreter
         return Compare(left, right, comparison.Value.Operator);
     }
 
-    private string ReplaceVariables(string expression, int line) =>
-        Regex.Replace(expression, @"\b[A-Za-z_][A-Za-z0-9_]*\b", match =>
+    private string ReplaceVariables(string expression, int line)
+    {
+        var result = new System.Text.StringBuilder();
+        var start = 0;
+        var inString = false;
+        for (var index = 0; index < expression.Length; index++)
+        {
+            if (expression[index] != '"')
+            {
+                continue;
+            }
+
+            if (inString)
+            {
+                result.Append(expression[start..(index + 1)]);
+                start = index + 1;
+                inString = false;
+            }
+            else
+            {
+                result.Append(ReplaceVariablesInPlainText(expression[start..index], line));
+                start = index;
+                inString = true;
+            }
+        }
+
+        if (start < expression.Length)
+        {
+            var tail = expression[start..];
+            result.Append(inString ? tail : ReplaceVariablesInPlainText(tail, line));
+        }
+
+        return result.ToString();
+    }
+
+    private string ReplaceVariablesInPlainText(string text, int line) =>
+        Regex.Replace(text, @"\b[A-Za-z_][A-Za-z0-9_]*\b", match =>
         {
             if (_language.IsKeyword(match.Value, "true")) return "true";
             if (_language.IsKeyword(match.Value, "false")) return "false";

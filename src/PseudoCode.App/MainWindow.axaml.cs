@@ -78,6 +78,7 @@ public partial class MainWindow : Window
     private bool _isExecutionPaused;
     private CancellationTokenSource? _executionCancellation;
     private readonly ManualResetEventSlim _executionPauseGate = new(true);
+    private int _executionRunId;
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
@@ -174,13 +175,19 @@ public partial class MainWindow : Window
         _executionPauseGate.Set();
         _executionCancellation?.Dispose();
         _executionCancellation = new CancellationTokenSource();
+        ClearExecutionViewForRun(document);
         UpdateExecutionControls();
         UpdateWindowState("Ejecutando...");
+        var runId = ++_executionRunId;
         try
         {
             var source = document.Text;
             var cancellation = _executionCancellation;
-            var result = await Task.Run(() => document.Interpreter.Start(source, cancellation.Token, _executionPauseGate));
+            var result = await Task.Run(() => document.Interpreter.Start(
+                source,
+                cancellation.Token,
+                _executionPauseGate,
+                progress => Dispatcher.UIThread.Post(() => ApplyLiveExecutionResult(document, progress, runId), DispatcherPriority.Background)));
             document.LastExecutionResult = result;
 
             if (_currentDocument == document)
@@ -196,6 +203,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _executionRunId++;
             _isRunningCode = false;
             _isExecutionPaused = false;
             _executionPauseGate.Set();
@@ -203,6 +211,53 @@ public partial class MainWindow : Window
             _executionCancellation = null;
             UpdateExecutionControls();
         }
+    }
+
+    private void ApplyLiveExecutionResult(OpenDocument document, ExecutionResult result, int runId)
+    {
+        if (!_isRunningCode || runId != _executionRunId || _currentDocument != document)
+        {
+            return;
+        }
+
+        var outputText = BuildOutputText(result);
+        var diagnosticsText = BuildDiagnosticsText(result);
+        var variablesText = BuildVariablesText(result);
+        document.OutputText = outputText;
+        document.DiagnosticsText = diagnosticsText;
+        document.Diagnostics = ParseDiagnostics(result.Diagnostics).ToList();
+        document.VariablesText = variablesText;
+        document.LastExecutionResult = result;
+        document.DiagnosticLines = document.Diagnostics.Select(diagnostic => diagnostic.Line).ToHashSet();
+        VariablesTextBox.Text = variablesText;
+
+        if (document.Diagnostics.Count > 0)
+        {
+            _showDiagnostics = true;
+            UpdateDiagnosticUnderlines();
+        }
+
+        if (result.WaitingForInput)
+        {
+            ShowConsoleInput(result.InputVariable ?? "valor");
+        }
+
+        UpdateOutputPanelView();
+    }
+
+    private void ClearExecutionViewForRun(OpenDocument document)
+    {
+        document.LastExecutionResult = null;
+        document.OutputText = "Ejecutando...";
+        document.DiagnosticsText = "Sin diagnosticos.";
+        document.Diagnostics.Clear();
+        document.DiagnosticLines.Clear();
+        document.VariablesText = string.Empty;
+        VariablesTextBox.Text = string.Empty;
+        _showDiagnostics = false;
+        HighlightDebugLine(null);
+        UpdateDiagnosticUnderlines();
+        UpdateOutputPanelView();
     }
 
     private void PauseExecution_Click(object? sender, RoutedEventArgs e)
