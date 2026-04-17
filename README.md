@@ -65,6 +65,7 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 - Editor de pseudocodigo en espanol.
 - Dialecto principal estilo PSeInt.
 - Ejecucion de algoritmos con salida y variables.
+- Depuracion paso a paso con `F10`.
 - Diagnosticos y errores subrayados en rojo.
 - Tabs con multiples archivos.
 - Paneles redimensionables.

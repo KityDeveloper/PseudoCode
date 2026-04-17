@@ -77,6 +77,9 @@
             </MenuItem>
             <MenuItem Header="Ejecutar">
               <MenuItem Header="Ejecutar algoritmo" Click="Run_Click" />
+              <MenuItem Header="Iniciar depuración" Click="StartDebug_Click" />
+              <MenuItem Header="Paso a paso (F10)" Click="StepDebug_Click" />
+              <MenuItem Header="Detener depuración" Click="StopDebug_Click" />
             </MenuItem>
             <MenuItem Header="Ayuda">
               <MenuItem Header="Mostrar u ocultar ayuda" Click="ToggleHelp_Click" />
@@ -162,6 +165,8 @@
                       Margin="0,0,14,0"
                       Spacing="8">
             <Button Classes="command" Click="Run_Click" Content="Ejecutar" />
+            <Button Classes="command" Click="StartDebug_Click" Content="Depurar" ToolTip.Tip="Iniciar depuración paso a paso" />
+            <Button Classes="command" Click="StepDebug_Click" Content="F10 Paso" ToolTip.Tip="Ejecutar la línea actual y avanzar" />
             <Button Classes="command" Click="SaveFile_Click" Content="Guardar" />
           </StackPanel>
         </Border>

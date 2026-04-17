@@ -34,4 +34,6 @@ internal sealed class OpenDocument
     public bool HasUnsavedChanges { get; set; }
     public ExecutionResult? LastExecutionResult { get; set; }
     public AdvancedPseudoInterpreter Interpreter { get; }
+    public bool IsDebugging { get; set; }
+    public int? DebugLine { get; set; }
 }

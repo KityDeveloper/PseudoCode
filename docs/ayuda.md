@@ -43,6 +43,16 @@ El editor soporta tabs, multiples archivos, zoom del texto con `Ctrl` + scroll y
 
 La app puede ejecutar estructuras basicas de pseudocodigo: asignaciones, `Definir`, `Escribir`, `Leer`, `Si`, `Mientras`, `Para` y `Segun`.
 
+## Depuracion paso a paso
+
+Usa **Ejecutar > Iniciar depuracion** para comenzar una sesion paso a paso. La app selecciona la linea actual en el editor y muestra salida, diagnosticos y variables mientras avanzas.
+
+- `F10`: ejecuta la linea actual y avanza al siguiente paso.
+- **F10 Paso**: hace lo mismo desde el boton inferior.
+- **Detener depuracion**: limpia la marca de linea actual.
+
+Si editas el codigo, la sesion de depuracion se detiene para evitar que el paso actual quede desincronizado.
+
 ## Configuracion
 
 El lenguaje activo y los colores de sintaxis se pueden cambiar con JSON. Lee [Configuracion JSON](configuracion-json.md) para ver rutas, ejemplos y reglas.

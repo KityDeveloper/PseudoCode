@@ -25,3 +25,7 @@ FinAlgoritmo
 ## Objetivo
 
 PseudoCode busca crecer hacia una experiencia educativa estilo PSeInt: ejecucion, diagnosticos claros, ayuda integrada, pruebas de escritorio y herramientas de aprendizaje para pseudocodigo en espanol.
+
+## Depuracion
+
+La depuracion paso a paso permite avanzar con `F10` y ver seleccionada la linea actual en el editor. En cada paso se actualizan salida, diagnosticos y variables.

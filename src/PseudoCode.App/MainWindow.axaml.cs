@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
+    private DebugLineRenderer? _debugLineRenderer;
 
     public MainWindow()
     {
@@ -114,6 +115,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        StopDebug(document);
         HideConsoleInput();
         document.Text = EditorTextBox.Text ?? string.Empty;
         if (UpdateLiveSyntaxDiagnostics(document))
@@ -128,6 +130,25 @@ public partial class MainWindow : Window
         var result = document.Interpreter.Start(document.Text);
         document.LastExecutionResult = result;
         ShowExecutionResult(result);
+    }
+
+    private void StartDebug_Click(object? sender, RoutedEventArgs e)
+    {
+        StartDebugSession();
+    }
+
+    private void StepDebug_Click(object? sender, RoutedEventArgs e)
+    {
+        StepDebugSession();
+    }
+
+    private void StopDebug_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_currentDocument is not null)
+        {
+            StopDebug(_currentDocument);
+            UpdateWindowState("Depuracion detenida");
+        }
     }
 
     private void SendConsoleInput_Click(object? sender, RoutedEventArgs e)
@@ -149,6 +170,13 @@ public partial class MainWindow : Window
 
     private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F10)
+        {
+            StepDebugSession();
+            e.Handled = true;
+            return;
+        }
+
         if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             return;
@@ -515,9 +543,12 @@ public partial class MainWindow : Window
 
         _currentDocument.Text = EditorTextBox.Text ?? string.Empty;
         _currentDocument.HasUnsavedChanges = true;
+        _currentDocument.IsDebugging = false;
+        _currentDocument.DebugLine = null;
         _currentDocument.DiagnosticLines.Clear();
         UpdateLiveSyntaxDiagnostics(_currentDocument);
         UpdateDiagnosticUnderlines();
+        HighlightDebugLine(null);
         UpdateLineNumbers();
         UpdateVariablesList();
         RenderOpenDocuments();
@@ -760,8 +791,15 @@ public partial class MainWindow : Window
 
         var input = ConsoleInputTextBox.Text ?? string.Empty;
         ConsoleInputTextBox.Text = string.Empty;
-        document.LastExecutionResult = document.Interpreter.Continue(input);
-        ShowExecutionResult(document.LastExecutionResult);
+        if (document.IsDebugging)
+        {
+            ApplyDebugStepResult(document, document.Interpreter.ContinueDebug(input));
+        }
+        else
+        {
+            document.LastExecutionResult = document.Interpreter.Continue(input);
+            ShowExecutionResult(document.LastExecutionResult);
+        }
     }
 
     private void ShowExecutionResult(ExecutionResult result)
@@ -795,6 +833,86 @@ public partial class MainWindow : Window
         }
     }
 
+    private void StartDebugSession()
+    {
+        var document = _currentDocument;
+        if (document is null)
+        {
+            return;
+        }
+
+        HideConsoleInput();
+        document.Text = EditorTextBox.Text ?? string.Empty;
+        if (UpdateLiveSyntaxDiagnostics(document))
+        {
+            _showDiagnostics = true;
+            UpdateDiagnosticUnderlines();
+            UpdateOutputPanelView();
+            UpdateWindowState("Corrige los errores antes de depurar");
+            return;
+        }
+
+        document.IsDebugging = true;
+        ApplyDebugStepResult(document, document.Interpreter.StartDebug(document.Text));
+        UpdateWindowState("Depuracion iniciada - F10 para avanzar");
+    }
+
+    private void StepDebugSession()
+    {
+        var document = _currentDocument;
+        if (document is null)
+        {
+            return;
+        }
+
+        if (!document.IsDebugging)
+        {
+            StartDebugSession();
+            return;
+        }
+
+        ApplyDebugStepResult(document, document.Interpreter.StepDebug());
+    }
+
+    private void ApplyDebugStepResult(OpenDocument document, DebugStepResult step)
+    {
+        document.IsDebugging = !step.IsFinished;
+        document.DebugLine = step.CurrentLine;
+        ShowExecutionResult(step.Execution);
+        HighlightDebugLine(document.DebugLine);
+
+        if (step.Execution.WaitingForInput)
+        {
+            UpdateWindowState($"Depuracion esperando entrada: {step.Execution.InputVariable}");
+            return;
+        }
+
+        UpdateWindowState(step.IsFinished ? "Depuracion completada" : $"Depuracion en linea {step.CurrentLine}");
+    }
+
+    private void StopDebug(OpenDocument document)
+    {
+        document.IsDebugging = false;
+        document.DebugLine = null;
+        HighlightDebugLine(null);
+    }
+
+    private void HighlightDebugLine(int? lineNumber)
+    {
+        _debugLineRenderer?.SetLine(lineNumber);
+        if (lineNumber is not { } line || EditorTextBox.Document is null || line > EditorTextBox.Document.LineCount)
+        {
+            EditorTextBox.TextArea.TextView.Redraw();
+            return;
+        }
+
+        var documentLine = EditorTextBox.Document.GetLineByNumber(line);
+        EditorTextBox.Select(documentLine.Offset, Math.Max(1, documentLine.Length));
+        EditorTextBox.CaretOffset = documentLine.Offset;
+        EditorTextBox.ScrollToLine(line);
+        EditorTextBox.TextArea.TextView.Redraw();
+    }
+
     private void ShowConsoleInput(string variableName)
     {
         ConsoleInputPrompt.Text = $"{variableName}:";
@@ -817,6 +935,8 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
         _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer(palette.DiagnosticUnderlineBrush);
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
+        _debugLineRenderer = new DebugLineRenderer(new SolidColorBrush(Color.Parse("#2A5A2A")));
+        EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_debugLineRenderer);
         ApplyEditorTheme(DarkTheme, palette);
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
@@ -1117,6 +1237,7 @@ public partial class MainWindow : Window
 
         UpdateLineNumbers();
         UpdateVariablesList();
+        HighlightDebugLine(document.DebugLine);
         UpdateDiagnosticUnderlines();
         UpdateOutputPanelView();
         RenderOpenDocuments();

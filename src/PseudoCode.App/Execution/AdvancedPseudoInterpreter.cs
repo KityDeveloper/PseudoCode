@@ -14,6 +14,7 @@ internal sealed class AdvancedPseudoInterpreter
     private readonly List<string> _diagnostics = [];
     private readonly List<string> _inputs = [];
     private IReadOnlyList<Node> _program = [];
+    private readonly List<DebugFrame> _debugFrames = [];
     private int _inputIndex;
     private string? _waitingInputVariable;
 
@@ -41,15 +42,55 @@ internal sealed class AdvancedPseudoInterpreter
         return ExecuteFromStart();
     }
 
+    public DebugStepResult StartDebug(string source)
+    {
+        _inputs.Clear();
+        _program = Parse(source);
+        ResetExecutionState();
+        _debugFrames.Clear();
+        _debugFrames.Add(new BlockFrame(_program));
+        return BuildDebugResult(isFinished: false);
+    }
+
+    public DebugStepResult StepDebug()
+    {
+        if (_waitingInputVariable is not null)
+        {
+            return BuildDebugResult(isFinished: false);
+        }
+
+        ExecuteDebugStep();
+        return BuildDebugResult(_debugFrames.Count == 0 && _waitingInputVariable is null);
+    }
+
+    public DebugStepResult ContinueDebug(string input)
+    {
+        if (_waitingInputVariable is null)
+        {
+            _diagnostics.Add($"Linea 1: no hay ninguna instruccion {_language.Keyword("read")} esperando datos. Causa: la depuracion no esta pausada esperando entrada. Solucion: avanza hasta una instruccion {_language.Keyword("read")}.");
+            return BuildDebugResult(isFinished: _debugFrames.Count == 0);
+        }
+
+        _inputs.Add(input);
+        _waitingInputVariable = null;
+        ExecuteDebugStep();
+        return BuildDebugResult(_debugFrames.Count == 0 && _waitingInputVariable is null);
+    }
+
     private ExecutionResult ExecuteFromStart()
+    {
+        ResetExecutionState();
+        ExecuteBlock(_program);
+        return BuildResult();
+    }
+
+    private void ResetExecutionState()
     {
         _variables.Clear();
         _output.Clear();
         _diagnostics.Clear();
         _waitingInputVariable = null;
         _inputIndex = 0;
-        ExecuteBlock(_program);
-        return BuildResult();
     }
 
     private IReadOnlyList<Node> Parse(string source)
@@ -303,6 +344,123 @@ internal sealed class AdvancedPseudoInterpreter
         }
     }
 
+    private void ExecuteDebugStep()
+    {
+        NormalizeDebugFrames();
+        if (_debugFrames.Count == 0)
+        {
+            return;
+        }
+
+        var frame = _debugFrames[^1];
+        var node = frame.Current;
+        if (node is null)
+        {
+            NormalizeDebugFrames();
+            return;
+        }
+
+        switch (node)
+        {
+            case Read:
+                Execute(node);
+                if (_waitingInputVariable is null)
+                {
+                    frame.Advance();
+                }
+                break;
+            case If conditional:
+                frame.Advance();
+                _debugFrames.Add(new BlockFrame(ToBoolean(EvaluateCondition(conditional.Condition, node.Line)) ? conditional.ThenBody : conditional.ElseBody));
+                break;
+            case While loop:
+                frame.Advance();
+                if (ToBoolean(EvaluateCondition(loop.Condition, node.Line)))
+                {
+                    _debugFrames.Add(new WhileFrame(loop));
+                }
+                break;
+            case For loop:
+                frame.Advance();
+                var start = ToNumber(EvaluateValue(loop.Start, node.Line));
+                var end = ToNumber(EvaluateValue(loop.End, node.Line));
+                if (start <= end)
+                {
+                    _variables[loop.Variable] = start;
+                    _debugFrames.Add(new ForFrame(loop, end, start));
+                }
+                break;
+            case Switch selection:
+                frame.Advance();
+                var selected = EvaluateValue(selection.Expression, node.Line);
+                var selectedBody = selection.DefaultBody;
+                foreach (var option in selection.Cases)
+                {
+                    if (option.Values.Any(value => ValuesEqual(selected, EvaluateValue(value, option.Line))))
+                    {
+                        selectedBody = option.Body;
+                        break;
+                    }
+                }
+                _debugFrames.Add(new BlockFrame(selectedBody));
+                break;
+            default:
+                frame.Advance();
+                Execute(node);
+                break;
+        }
+
+        NormalizeDebugFrames();
+    }
+
+    private void NormalizeDebugFrames()
+    {
+        while (_debugFrames.Count > 0)
+        {
+            var frame = _debugFrames[^1];
+            if (!frame.IsComplete)
+            {
+                return;
+            }
+
+            _debugFrames.RemoveAt(_debugFrames.Count - 1);
+            switch (frame)
+            {
+                case WhileFrame whileFrame:
+                    whileFrame.Iteration++;
+                    if (whileFrame.Iteration > 10000)
+                    {
+                        AddRuntime(whileFrame.Loop.Line, $"ciclo {_language.Keyword("while")} detenido", "supero 10000 iteraciones", "revisa que la condicion cambie");
+                        continue;
+                    }
+                    if (ToBoolean(EvaluateCondition(whileFrame.Loop.Condition, whileFrame.Loop.Line)))
+                    {
+                        whileFrame.Reset();
+                        _debugFrames.Add(whileFrame);
+                        return;
+                    }
+                    break;
+                case ForFrame forFrame:
+                    var next = forFrame.CurrentValue + 1;
+                    if (next <= forFrame.End)
+                    {
+                        _variables[forFrame.Loop.Variable] = next;
+                        forFrame.CurrentValue = next;
+                        forFrame.Reset();
+                        _debugFrames.Add(forFrame);
+                        return;
+                    }
+                    break;
+            }
+        }
+    }
+
+    private DebugStepResult BuildDebugResult(bool isFinished)
+    {
+        NormalizeDebugFrames();
+        return new DebugStepResult(BuildResult(), _debugFrames.LastOrDefault()?.Current?.Line, isFinished || _debugFrames.Count == 0);
+    }
+
     private object? EvaluateValue(string expression, int line)
     {
         expression = expression.Trim();
@@ -501,4 +659,42 @@ internal sealed class AdvancedPseudoInterpreter
     private sealed record For(int Line, string Variable, string Start, string End, IReadOnlyList<Node> Body) : Node(Line);
     private sealed record Switch(int Line, string Expression, IReadOnlyList<SwitchCase> Cases, IReadOnlyList<Node> DefaultBody) : Node(Line);
     private sealed record SwitchCase(int Line, IReadOnlyList<string> Values, IReadOnlyList<Node> Body);
+
+    private abstract class DebugFrame
+    {
+        protected DebugFrame(IReadOnlyList<Node> nodes)
+        {
+            Nodes = nodes;
+        }
+
+        public IReadOnlyList<Node> Nodes { get; }
+        public int Index { get; private set; }
+        public Node? Current => Index < Nodes.Count ? Nodes[Index] : null;
+        public bool IsComplete => Index >= Nodes.Count;
+
+        public void Advance()
+        {
+            Index++;
+        }
+
+        public void Reset()
+        {
+            Index = 0;
+        }
+    }
+
+    private sealed class BlockFrame(IReadOnlyList<Node> nodes) : DebugFrame(nodes);
+
+    private sealed class WhileFrame(While loop) : DebugFrame(loop.Body)
+    {
+        public While Loop { get; } = loop;
+        public int Iteration { get; set; }
+    }
+
+    private sealed class ForFrame(For loop, double end, double currentValue) : DebugFrame(loop.Body)
+    {
+        public For Loop { get; } = loop;
+        public double End { get; } = end;
+        public double CurrentValue { get; set; } = currentValue;
+    }
 }
