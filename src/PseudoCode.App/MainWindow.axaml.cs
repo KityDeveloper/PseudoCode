@@ -428,12 +428,12 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Title = "Acerca de PseudoCode",
-            Width = 420,
-            Height = 520,
-            MinWidth = 420,
-            MinHeight = 520,
-            MaxWidth = 420,
-            MaxHeight = 520,
+            Width = 840,
+            Height = 540,
+            MinWidth = 840,
+            MinHeight = 540,
+            MaxWidth = 840,
+            MaxHeight = 540,
             CanResize = false,
             CanMinimize = false,
             CanMaximize = false,
@@ -445,17 +445,17 @@ public partial class MainWindow : Window
         var appIcon = new Image
         {
             Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/logoPseudoCode.png"))),
-            Width = 76,
-            Height = 76,
+            Width = 220,
+            Height = 120,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
         var authorLogo = new Image
         {
-            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/LogoKityDev.png"))),
-            Width = 72,
-            Height = 72,
+            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png"))),
+            Width = 150,
+            Height = 150,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -467,14 +467,6 @@ public partial class MainWindow : Window
             Children =
             {
                 appIcon,
-                new TextBlock
-                {
-                    Text = AppInfoService.AppName,
-                    Foreground = Brush("TextPrimary"),
-                    FontSize = 22,
-                    FontWeight = FontWeight.SemiBold,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                },
                 new TextBlock
                 {
                     Text = $"Version: {AppInfoService.Version}",

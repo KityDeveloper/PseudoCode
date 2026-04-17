@@ -146,10 +146,32 @@ internal sealed class PseudoLanguageDefinition
             DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? dto.Id.Trim() : dto.DisplayName.Trim(),
             Keywords = keywords,
             Types = dto.Types.Select(type => type.Trim()).Where(type => type.Length > 0).ToList(),
-            Snippets = dto.Snippets.Count > 0
-                ? dto.Snippets.Select(item => new CommandInfo(item.Text, item.InsertText, item.Description, item.IsTemplate)).ToList()
-                : BuildDefaultSnippets(keywords)
+            Snippets = MergeSnippets(dto.Snippets, BuildDefaultSnippets(keywords))
         };
+    }
+
+    private static List<CommandInfo> MergeSnippets(IReadOnlyList<CommandInfoDto> customSnippets, IReadOnlyList<CommandInfo> defaults)
+    {
+        if (customSnippets.Count == 0)
+        {
+            return defaults.ToList();
+        }
+
+        var merged = customSnippets
+            .Where(item => !string.IsNullOrWhiteSpace(item.Text) && !string.IsNullOrWhiteSpace(item.InsertText))
+            .Select(item => new CommandInfo(item.Text, item.InsertText, item.Description, item.IsTemplate))
+            .ToList();
+        var existing = merged.Select(item => item.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in defaults)
+        {
+            if (existing.Add(item.Text))
+            {
+                merged.Add(item);
+            }
+        }
+
+        return merged;
     }
 
     private static List<CommandInfo> BuildDefaultSnippets(IReadOnlyDictionary<string, string> keywords) =>
