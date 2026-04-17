@@ -9,6 +9,8 @@ namespace PseudoCode.App;
 internal sealed class AdvancedPseudoInterpreter
 {
     private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+    private const int MaxExecutionSteps = 100000;
+    private const int MaxOutputLines = 5000;
     private readonly PseudoLanguageDefinition _language;
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
@@ -19,6 +21,9 @@ internal sealed class AdvancedPseudoInterpreter
     private int _inputIndex;
     private string? _waitingInputVariable;
     private bool _outputLineOpen;
+    private int _executionSteps;
+    private bool _halted;
+    private bool _outputLimitReported;
 
     public AdvancedPseudoInterpreter(PseudoLanguageDefinition language)
     {
@@ -105,6 +110,9 @@ internal sealed class AdvancedPseudoInterpreter
         _diagnostics.Clear();
         _waitingInputVariable = null;
         _outputLineOpen = false;
+        _executionSteps = 0;
+        _halted = false;
+        _outputLimitReported = false;
         _inputIndex = 0;
     }
 
@@ -298,13 +306,26 @@ internal sealed class AdvancedPseudoInterpreter
     {
         foreach (var node in nodes)
         {
-            if (_waitingInputVariable is not null) return;
+            if (_waitingInputVariable is not null || _halted) return;
             Execute(node);
         }
     }
 
     private void Execute(Node node)
     {
+        if (_halted)
+        {
+            return;
+        }
+
+        _executionSteps++;
+        if (_executionSteps > MaxExecutionSteps)
+        {
+            _halted = true;
+            AddRuntime(node.Line, "ejecucion detenida por seguridad", $"supero {MaxExecutionSteps} pasos", $"usa {_language.Keyword("wait")}, {_language.Keyword("clear")} {_language.Keyword("screen")} o reduce los ciclos");
+            return;
+        }
+
         switch (node)
         {
             case NoOp:
@@ -326,7 +347,7 @@ internal sealed class AdvancedPseudoInterpreter
             case Read read:
                 foreach (var name in read.Names)
                 {
-                    _output.Add($"? {name}:");
+                    AddOutput($"? {name}:");
                     _outputLineOpen = false;
                     if (_inputIndex >= _inputs.Count)
                     {
@@ -335,13 +356,14 @@ internal sealed class AdvancedPseudoInterpreter
                     }
                     var input = _inputs[_inputIndex++];
                     _variables[name] = ParseInput(input);
-                    _output.Add($"> {input}");
+                    AddOutput($"> {input}");
                     _outputLineOpen = false;
                 }
                 return;
             case Clear:
                 _output.Clear();
                 _outputLineOpen = false;
+                _outputLimitReported = false;
                 return;
             case Wait wait:
                 var duration = Math.Max(0, ToNumber(EvaluateValue(wait.DurationExpression, node.Line)));
@@ -358,7 +380,7 @@ internal sealed class AdvancedPseudoInterpreter
                 {
                     if (guard > 10000) { AddRuntime(node.Line, $"ciclo {_language.Keyword("while")} detenido", "supero 10000 iteraciones", "revisa que la condicion cambie"); return; }
                     ExecuteBlock(loop.Body);
-                    if (_waitingInputVariable is not null) return;
+                    if (_waitingInputVariable is not null || _halted) return;
                 }
                 return;
             case For loop:
@@ -368,7 +390,7 @@ internal sealed class AdvancedPseudoInterpreter
                 {
                     _variables[loop.Variable] = value;
                     ExecuteBlock(loop.Body);
-                    if (_waitingInputVariable is not null) return;
+                    if (_waitingInputVariable is not null || _halted) return;
                 }
                 return;
             case Switch selection:
@@ -538,10 +560,27 @@ internal sealed class AdvancedPseudoInterpreter
         }
         else
         {
-            _output.Add(text);
+            AddOutput(text);
         }
 
         _outputLineOpen = withoutNewline;
+    }
+
+    private void AddOutput(string text)
+    {
+        if (_output.Count >= MaxOutputLines)
+        {
+            if (!_outputLimitReported)
+            {
+                _outputLimitReported = true;
+                _halted = true;
+                AddRuntime(1, "salida detenida por seguridad", $"supero {MaxOutputLines} lineas", $"usa {_language.Keyword("clear")} {_language.Keyword("screen")} dentro de ciclos largos o reduce la cantidad de {_language.Keyword("write")}");
+            }
+
+            return;
+        }
+
+        _output.Add(text);
     }
 
     private object? EvaluateValue(string expression, int line)

@@ -73,6 +73,7 @@ public partial class MainWindow : Window
     private bool _showDiagnostics;
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
+    private bool _isRunningCode;
     private CompletionWindow? _completionWindow;
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
@@ -143,10 +144,10 @@ public partial class MainWindow : Window
         AddNewDocument();
     }
 
-    private void Run_Click(object? sender, RoutedEventArgs e)
+    private async void Run_Click(object? sender, RoutedEventArgs e)
     {
         var document = _currentDocument;
-        if (document is null)
+        if (document is null || _isRunningCode)
         {
             return;
         }
@@ -163,14 +164,28 @@ public partial class MainWindow : Window
             return;
         }
 
-        var result = document.Interpreter.Start(document.Text);
-        document.LastExecutionResult = result;
-        ShowExecutionResult(result);
-        if (result.Diagnostics.Count > 0)
+        _isRunningCode = true;
+        UpdateWindowState("Ejecutando...");
+        try
         {
-            _showDiagnostics = true;
-            UpdateOutputPanelView();
-            UpdateWindowState("No se ejecuto: hay errores");
+            var source = document.Text;
+            var result = await Task.Run(() => document.Interpreter.Start(source));
+            document.LastExecutionResult = result;
+
+            if (_currentDocument == document)
+            {
+                ShowExecutionResult(result);
+                if (result.Diagnostics.Count > 0)
+                {
+                    _showDiagnostics = true;
+                    UpdateOutputPanelView();
+                    UpdateWindowState("Ejecucion detenida con diagnosticos");
+                }
+            }
+        }
+        finally
+        {
+            _isRunningCode = false;
         }
     }
 
