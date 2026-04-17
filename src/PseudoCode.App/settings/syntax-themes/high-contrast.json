@@ -9,6 +9,7 @@
     "operator": "#F8F8F2",
     "comment": "#8BE9A6",
     "blockBackground": "#14324A",
-    "diagnosticUnderline": "#FF2E2E"
+    "diagnosticUnderline": "#FF2E2E",
+    "editorBackground": "#000000"
   }
 }

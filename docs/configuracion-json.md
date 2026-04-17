@@ -159,10 +159,13 @@ Un tema de sintaxis cambia solo los colores del editor.
     "operator": "#DCDCAA",
     "comment": "#6A9955",
     "blockBackground": "#1F3B4D",
-    "diagnosticUnderline": "#FF4D4D"
+    "diagnosticUnderline": "#FF4D4D",
+    "editorBackground": "#1E1E1E"
   }
 }
 ```
+
+`editorBackground` cambia el fondo del area de codigo. Los demas colores del layout general de la app siguen dependiendo del modo claro/oscuro de la interfaz.
 
 ## Fallback y validacion
 

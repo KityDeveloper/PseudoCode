@@ -18,6 +18,7 @@ internal sealed class SyntaxTheme
     public string Comment { get; init; } = "#6A9955";
     public string BlockBackground { get; init; } = "#1F3B4D";
     public string DiagnosticUnderline { get; init; } = "#FF4D4D";
+    public string EditorBackground { get; init; } = "#1E1E1E";
 
     public PseudoCodeColorPalette ToPalette() => new(
         Brush(Keyword),
@@ -27,7 +28,8 @@ internal sealed class SyntaxTheme
         Brush(Operator),
         Brush(Comment),
         Brush(BlockBackground),
-        Brush(DiagnosticUnderline));
+        Brush(DiagnosticUnderline),
+        Brush(EditorBackground));
 
     public static SyntaxTheme CreateDark() => new();
 
@@ -42,7 +44,8 @@ internal sealed class SyntaxTheme
         Operator = "#795E26",
         Comment = "#008000",
         BlockBackground = "#EAF3FF",
-        DiagnosticUnderline = "#DC2626"
+        DiagnosticUnderline = "#DC2626",
+        EditorBackground = "#FFFFFF"
     };
 
     public static SyntaxTheme FromDto(SyntaxThemeDto dto, SyntaxTheme fallback, List<string> diagnostics)
@@ -63,6 +66,10 @@ internal sealed class SyntaxTheme
             _ = Color.Parse(dto.Syntax.Comment);
             _ = Color.Parse(dto.Syntax.BlockBackground);
             _ = Color.Parse(dto.Syntax.DiagnosticUnderline);
+            if (!string.IsNullOrWhiteSpace(dto.Syntax.EditorBackground))
+            {
+                _ = Color.Parse(dto.Syntax.EditorBackground);
+            }
         }
         catch
         {
@@ -81,7 +88,10 @@ internal sealed class SyntaxTheme
             Operator = dto.Syntax.Operator,
             Comment = dto.Syntax.Comment,
             BlockBackground = dto.Syntax.BlockBackground,
-            DiagnosticUnderline = dto.Syntax.DiagnosticUnderline
+            DiagnosticUnderline = dto.Syntax.DiagnosticUnderline,
+            EditorBackground = string.IsNullOrWhiteSpace(dto.Syntax.EditorBackground)
+                ? fallback.EditorBackground
+                : dto.Syntax.EditorBackground
         };
     }
 
@@ -125,4 +135,7 @@ internal sealed class SyntaxThemeColorsDto
 
     [JsonPropertyName("diagnosticUnderline")]
     public string DiagnosticUnderline { get; set; } = "#FF4D4D";
+
+    [JsonPropertyName("editorBackground")]
+    public string? EditorBackground { get; set; }
 }

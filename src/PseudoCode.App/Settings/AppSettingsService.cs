@@ -539,7 +539,8 @@ internal static class AppSettingsService
         "operator": "#DCDCAA",
         "comment": "#6A9955",
         "blockBackground": "#1F3B4D",
-        "diagnosticUnderline": "#FF4D4D"
+        "diagnosticUnderline": "#FF4D4D",
+        "editorBackground": "#1E1E1E"
       }
     }
     """;
@@ -556,7 +557,8 @@ internal static class AppSettingsService
         "operator": "#DCDCAA",
         "comment": "#6A9955",
         "blockBackground": "#1F3B4D",
-        "diagnosticUnderline": "#FF4D4D"
+        "diagnosticUnderline": "#FF4D4D",
+        "editorBackground": "#1E1E1E"
       }
     }
     """;
@@ -573,7 +575,8 @@ internal static class AppSettingsService
         "operator": "#795E26",
         "comment": "#008000",
         "blockBackground": "#EAF3FF",
-        "diagnosticUnderline": "#DC2626"
+        "diagnosticUnderline": "#DC2626",
+        "editorBackground": "#FFFFFF"
       }
     }
     """;
@@ -590,7 +593,8 @@ internal static class AppSettingsService
         "operator": "#F8F8F2",
         "comment": "#8BE9A6",
         "blockBackground": "#14324A",
-        "diagnosticUnderline": "#FF2E2E"
+        "diagnosticUnderline": "#FF2E2E",
+        "editorBackground": "#000000"
       }
     }
     """;
@@ -607,7 +611,8 @@ internal static class AppSettingsService
         "operator": "#E0E0E0",
         "comment": "#7BD88F",
         "blockBackground": "#30343F",
-        "diagnosticUnderline": "#EF233C"
+        "diagnosticUnderline": "#EF233C",
+        "editorBackground": "#211F26"
       }
     }
     """;

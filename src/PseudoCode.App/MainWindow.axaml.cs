@@ -308,19 +308,20 @@ public partial class MainWindow : Window
         await ShowDocumentationAsync(DocumentationService.ReleaseNotes);
     }
 
-    private async Task ShowDocumentationAsync(DocumentationPage page)
+    private Task ShowDocumentationAsync(DocumentationPage page)
     {
         var window = DocumentationService.BuildWindow(page, _isLightTheme ? LightTheme : DarkTheme);
-        await window.ShowDialog(this);
+        window.Show(this);
+        return Task.CompletedTask;
     }
 
-    private async Task ShowJsonSettingsEditorAsync(string title, Func<JsonConfigTarget, bool> filter)
+    private Task ShowJsonSettingsEditorAsync(string title, Func<JsonConfigTarget, bool> filter)
     {
         var targets = AppSettingsService.GetConfigTargets(_runtimeSettings).Where(filter).ToArray();
         if (targets.Length == 0)
         {
             UpdateWindowState("No hay archivos JSON configurables para esta seccion");
-            return;
+            return Task.CompletedTask;
         }
 
         var selectedTarget = targets[0];
@@ -557,10 +558,11 @@ public partial class MainWindow : Window
             }
         };
 
-        await window.ShowDialog(this);
+        window.Show(this);
+        return Task.CompletedTask;
     }
 
-    private async Task ShowSettingsConfigurationAsync()
+    private Task ShowSettingsConfigurationAsync()
     {
         var colors = _isLightTheme ? LightTheme : DarkTheme;
         var window = new Window
@@ -683,7 +685,8 @@ public partial class MainWindow : Window
         {
             Content = content
         };
-        await window.ShowDialog(this);
+        window.Show(this);
+        return Task.CompletedTask;
     }
 
     private void ReloadRuntimeSettings()
@@ -1889,7 +1892,8 @@ public partial class MainWindow : Window
 
     private void ApplyEditorTheme(IReadOnlyDictionary<string, string> colors, PseudoCodeColorPalette syntaxPalette)
     {
-        EditorTextBox.Background = BrushFromTheme(colors, "EditorBackground");
+        EditorTextBox.Background = syntaxPalette.EditorBackgroundBrush;
+        EditorTextBox.TextArea.Background = syntaxPalette.EditorBackgroundBrush;
         EditorTextBox.Foreground = BrushFromTheme(colors, "TextPrimary");
         EditorTextBox.TextArea.Caret.CaretBrush = BrushFromTheme(colors, "CaretBrush");
         EditorTextBox.TextArea.SelectionBrush = BrushFromTheme(colors, "SelectionBrush");

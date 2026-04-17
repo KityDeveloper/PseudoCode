@@ -13,7 +13,8 @@ internal sealed record PseudoCodeColorPalette(
     IBrush OperatorBrush,
     IBrush CommentBrush,
     IBrush BlockBrush,
-    IBrush DiagnosticUnderlineBrush);
+    IBrush DiagnosticUnderlineBrush,
+    IBrush EditorBackgroundBrush);
 
 internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
 {
