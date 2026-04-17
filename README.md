@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
 [![Estado](https://img.shields.io/badge/estado-estable-brightgreen)](CHANGELOG.md)
-[![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-lightgrey)](#descargas)
+[![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#descargas)
 [![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
 
 PseudoCode es una app de escritorio para practicar logica de programacion con pseudocodigo en español. Esta pensada para estudiantes, profesores y personas que quieren probar algoritmos sin configurar un lenguaje de programacion completo.
@@ -145,7 +145,8 @@ Los paquetes se publican en [GitHub Releases](https://github.com/KityDeveloper/P
 | Linux | `.tar.gz` | Portable |
 | Debian/Ubuntu | `.deb` | Instalacion con `apt` |
 | Fedora/Bazzite | `.rpm` | Instalacion con `dnf` o rpm-ostree |
-| macOS | Planeado | Pendiente |
+| macOS Intel | `.zip` | Portable, sin firmar/notarizar |
+| macOS Apple Silicon | `.zip` | Portable, sin firmar/notarizar |
 
 > Nota: algunos builds pueden no estar firmados todavia. En Windows o macOS puede aparecer una advertencia del sistema operativo.
 

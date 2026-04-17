@@ -12,6 +12,14 @@ La version actual es `1.1.0`.
 - `pseudocode_X.Y.Z_amd64.deb`
 - `pseudocode-X.Y.Z.x86_64.rpm`
 - `PseudoCode-win-x64-vX.Y.Z.zip`
+- `PseudoCode-osx-x64-vX.Y.Z.zip`
+- `PseudoCode-osx-arm64-vX.Y.Z.zip`
+
+## macOS
+
+El workflow genera paquetes `.zip` para Intel (`osx-x64`) y Apple Silicon (`osx-arm64`) usando runners `macos-latest`.
+
+Estos builds todavia no estan firmados ni notarizados. macOS puede mostrar una advertencia de Gatekeeper al abrirlos por primera vez.
 
 ## Instalar en Debian/Ubuntu
 
@@ -46,4 +54,16 @@ Windows x64:
 
 ```bash
 dotnet publish src/PseudoCode.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/win-x64
+```
+
+macOS Intel:
+
+```bash
+dotnet publish src/PseudoCode.App -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/osx-x64
+```
+
+macOS Apple Silicon:
+
+```bash
+dotnet publish src/PseudoCode.App -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -o artifacts/osx-arm64
 ```

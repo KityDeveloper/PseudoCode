@@ -15,6 +15,7 @@ Version estable enfocada en hacer la ejecucion mas parecida a una terminal real 
 - Limpieza de diagnosticos, variables y subrayados viejos al iniciar una nueva ejecucion.
 - Evaluacion de expresiones mas segura: no intenta reemplazar variables dentro de textos entre comillas.
 - Mejor comportamiento para programas PSeInt con `Sin Saltar`, `Borrar Pantalla`, `Esperar` y `;`.
+- GitHub Actions ahora genera paquetes macOS Intel (`osx-x64`) y Apple Silicon (`osx-arm64`).
 
 ### Notas
 

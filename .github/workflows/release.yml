@@ -30,6 +30,16 @@ jobs:
             runtime: win-x64
             archive: zip
             output: PseudoCode-win-x64
+          - name: macOS Intel
+            os: macos-latest
+            runtime: osx-x64
+            archive: zip
+            output: PseudoCode-osx-x64
+          - name: macOS Apple Silicon
+            os: macos-latest
+            runtime: osx-arm64
+            archive: zip
+            output: PseudoCode-osx-arm64
 
     steps:
       - name: Checkout
@@ -159,7 +169,7 @@ jobs:
           rpmbuild --define "_topdir $PWD/rpmbuild" -bb rpmbuild/SPECS/pseudocode.spec
           cp rpmbuild/RPMS/x86_64/*.rpm "dist/${package_name}-${version}.x86_64.rpm"
 
-      - name: Package Windows
+      - name: Package Zip
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
@@ -257,6 +267,8 @@ jobs:
             echo "- Linux portable: paquete .tar.gz"
             echo "- Debian/Ubuntu: paquete .deb"
             echo "- Fedora/Bazzite: paquete .rpm"
+            echo "- macOS Intel: paquete .zip"
+            echo "- macOS Apple Silicon: paquete .zip"
             echo
             echo "## Documentacion"
             echo
