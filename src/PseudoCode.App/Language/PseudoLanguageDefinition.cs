@@ -68,7 +68,7 @@ internal sealed class PseudoLanguageDefinition
         return new Regex(@"^\s*(" + string.Join("|", words) + @")\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 
-    public IReadOnlyList<CommandInfo> BuildQuickTemplates() => BuildDefaultSnippets(Keywords)
+    public IReadOnlyList<CommandInfo> BuildQuickTemplates() => BuildDefaultSnippets(Keywords, Types)
         .Where(item => item.IsTemplate)
         .ToArray();
 
@@ -105,13 +105,14 @@ internal sealed class PseudoLanguageDefinition
             ["not"] = "NO"
         };
 
+        var types = new List<string> { "Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano" };
         return new PseudoLanguageDefinition
         {
             Id = DefaultDialectId,
             DisplayName = "PSeInt",
             Keywords = keywords,
-            Types = ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
-            Snippets = BuildDefaultSnippets(keywords)
+            Types = types,
+            Snippets = BuildDefaultSnippets(keywords, types)
         };
     }
 
@@ -144,13 +145,14 @@ internal sealed class PseudoLanguageDefinition
             return fallback;
         }
 
+        var types = dto.Types.Select(type => type.Trim()).Where(type => type.Length > 0).ToList();
         return new PseudoLanguageDefinition
         {
             Id = dto.Id.Trim(),
             DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? dto.Id.Trim() : dto.DisplayName.Trim(),
             Keywords = keywords,
-            Types = dto.Types.Select(type => type.Trim()).Where(type => type.Length > 0).ToList(),
-            Snippets = MergeSnippets(dto.Snippets, BuildDefaultSnippets(keywords))
+            Types = types,
+            Snippets = MergeSnippets(dto.Snippets, BuildDefaultSnippets(keywords, types))
         };
     }
 
@@ -182,27 +184,42 @@ internal sealed class PseudoLanguageDefinition
         return merged;
     }
 
-    private static List<CommandInfo> BuildDefaultSnippets(IReadOnlyDictionary<string, string> keywords) =>
-    [
-        new(keywords["algorithmStart"], $"{keywords["algorithmStart"]} MiPrograma\n    \n{keywords["algorithmEnd"]}", "Define el inicio y fin de un algoritmo.", true),
-        new(keywords["declare"], $"{keywords["declare"]} variable {keywords["typeSeparator"]} Entero", "Declara una o varias variables.", true),
-        new(keywords["write"], $"{keywords["write"]} \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
-        new(keywords["read"], $"{keywords["read"]} variable", "Espera un valor en la consola antes de continuar.", true),
-        new(keywords["if"], $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["endIf"]}", "Bloque condicional.", true),
-        new($"{keywords["if"]}/{keywords["else"]}", $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["else"]}\n    \n{keywords["endIf"]}", "Condicional con alternativa.", true),
-        new(keywords["while"], $"{keywords["while"]} condicion {keywords["do"]}\n    \n{keywords["endWhile"]}", "Repite mientras se cumpla una condicion.", true),
-        new(keywords["for"], $"{keywords["for"]} i <- 1 {keywords["until"]} 10 {keywords["do"]}\n    \n{keywords["endFor"]}", "Repite con contador.", true),
-        new(keywords["switch"], $"{keywords["switch"]} opcion {keywords["do"]}\n    1:\n        \n{keywords["endSwitch"]}", "Seleccion multiple.", true),
-        new("Entero", "Entero", "Tipo numerico entero."),
-        new("Real", "Real", "Tipo numerico decimal."),
-        new("Cadena", "Cadena", "Tipo de texto."),
-        new("Logico", "Logico", "Tipo verdadero/falso."),
-        new(keywords["true"], keywords["true"], "Valor logico verdadero."),
-        new(keywords["false"], keywords["false"], "Valor logico falso."),
-        new(keywords["and"], keywords["and"], "Operador logico AND."),
-        new(keywords["or"], keywords["or"], "Operador logico OR."),
-        new(keywords["not"], keywords["not"], "Negacion logica.")
-    ];
+    private static List<CommandInfo> BuildDefaultSnippets(IReadOnlyDictionary<string, string> keywords, IReadOnlyList<string> types)
+    {
+        var integerType = FindType(types, "Entero", "Integer") ?? types.First();
+        var realType = FindType(types, "Real") ?? integerType;
+        var textType = FindType(types, "Cadena", "String", "Texto") ?? integerType;
+        var logicalType = FindType(types, "Logico", "Logical", "Booleano", "Boolean") ?? integerType;
+
+        var snippets = new List<CommandInfo>
+        {
+            new(keywords["algorithmStart"], $"{keywords["algorithmStart"]} MiPrograma\n    \n{keywords["algorithmEnd"]}", "Define el inicio y fin de un algoritmo.", true),
+            new(keywords["declare"], $"{keywords["declare"]} variable {keywords["typeSeparator"]} {integerType}", "Declara una o varias variables.", true),
+            new(keywords["write"], $"{keywords["write"]} \"Mensaje\", variable", "Muestra texto o valores en la salida.", true),
+            new(keywords["read"], $"{keywords["read"]} variable", "Espera un valor en la consola antes de continuar.", true),
+            new(keywords["if"], $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["endIf"]}", "Bloque condicional.", true),
+            new($"{keywords["if"]}/{keywords["else"]}", $"{keywords["if"]} condicion {keywords["then"]}\n    \n{keywords["else"]}\n    \n{keywords["endIf"]}", "Condicional con alternativa.", true),
+            new(keywords["while"], $"{keywords["while"]} condicion {keywords["do"]}\n    \n{keywords["endWhile"]}", "Repite mientras se cumpla una condicion.", true),
+            new(keywords["for"], $"{keywords["for"]} i <- 1 {keywords["until"]} 10 {keywords["do"]}\n    \n{keywords["endFor"]}", "Repite con contador.", true),
+            new(keywords["switch"], $"{keywords["switch"]} opcion {keywords["do"]}\n    1:\n        \n{keywords["endSwitch"]}", "Seleccion multiple.", true),
+            new(integerType, integerType, "Tipo numerico entero."),
+            new(realType, realType, "Tipo numerico decimal."),
+            new(textType, textType, "Tipo de texto."),
+            new(logicalType, logicalType, "Tipo verdadero/falso."),
+            new(keywords["true"], keywords["true"], "Valor logico verdadero."),
+            new(keywords["false"], keywords["false"], "Valor logico falso."),
+            new(keywords["and"], keywords["and"], "Operador logico AND."),
+            new(keywords["or"], keywords["or"], "Operador logico OR."),
+            new(keywords["not"], keywords["not"], "Negacion logica.")
+        };
+
+        return snippets;
+    }
+
+    private static string? FindType(IReadOnlyList<string> types, params string[] preferred) =>
+        preferred
+            .Select(name => types.FirstOrDefault(type => type.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(type => !string.IsNullOrWhiteSpace(type));
 }
 
 internal sealed class PseudoLanguageDto

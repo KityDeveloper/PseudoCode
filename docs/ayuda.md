@@ -64,6 +64,8 @@ Desde la app tambien puedes usar el menu **Configuracion**:
 - **Configurar sintaxis** edita dialectos.
 - **Carpeta de configuracion** muestra rutas y crea plantillas JSON.
 
+En los editores JSON usa **Guardar y aplicar** para cambiar el dialecto o tema activo sin reiniciar. Al aplicar un dialecto tambien se actualizan las plantillas, el autocompletado, la validacion y el panel de ayuda.
+
 ## Mas documentacion
 
 - `docs/configuracion-json.md`

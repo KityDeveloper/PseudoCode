@@ -389,7 +389,7 @@ public partial class MainWindow : Window
                 : $"JSON invalido: {error}";
         };
 
-        var saveButton = new Button { Content = "Guardar", Classes = { "command" } };
+        var saveButton = new Button { Content = "Guardar y aplicar", Classes = { "command" } };
         saveButton.Click += (_, _) =>
         {
             var json = editor.Text ?? string.Empty;
@@ -399,9 +399,16 @@ public partial class MainWindow : Window
                 return;
             }
 
-            AppSettingsService.SaveTarget(selectedTarget, json);
-            ReloadRuntimeSettings();
-            status.Text = $"Guardado y aplicado: {selectedTarget.FullPath}";
+            try
+            {
+                var result = AppSettingsService.SaveAndSelectTarget(_runtimeSettings, selectedTarget, json, _isLightTheme);
+                ReloadRuntimeSettings();
+                status.Text = $"{result.Message} Archivo: {result.SavedPath}";
+            }
+            catch (Exception ex)
+            {
+                status.Text = $"No se pudo aplicar: {ex.Message}";
+            }
         };
 
         var loadButton = new Button { Content = "Cargar JSON...", Classes = { "command" } };
@@ -430,14 +437,16 @@ public partial class MainWindow : Window
             await using var stream = await file.OpenReadAsync();
             using var reader = new StreamReader(stream);
             editor.Text = await reader.ReadToEndAsync();
-            status.Text = $"JSON cargado desde: {file.Name}. Usa Guardar para copiarlo a {selectedTarget.RelativePath}.";
+            status.Text = AppSettingsService.TryReadJsonId(editor.Text ?? string.Empty, out var id, out _)
+                ? $"JSON cargado desde: {file.Name}. Usa Guardar y aplicar para seleccionarlo como '{id}'."
+                : $"JSON cargado desde: {file.Name}. Usa Guardar y aplicar para copiarlo a {selectedTarget.RelativePath}.";
         };
 
         var resetButton = new Button { Content = "Usar plantilla", Classes = { "command" } };
         resetButton.Click += (_, _) =>
         {
             editor.Text = selectedTarget.Template.Trim() + Environment.NewLine;
-            status.Text = "Plantilla cargada en el editor. Usa Guardar para escribirla.";
+            status.Text = "Plantilla cargada en el editor. Usa Guardar y aplicar para activarla.";
         };
 
         var openFolderButton = new Button { Content = "Abrir carpeta", Classes = { "command" } };
@@ -2101,6 +2110,8 @@ public partial class MainWindow : Window
         var typeSeparator = language.Keyword("typeSeparator");
         var write = language.Keyword("write");
         var read = language.Keyword("read");
+        var integerType = FindLanguageType(language, "Entero", "Integer") ?? language.Types.FirstOrDefault() ?? "Entero";
+        var textType = FindLanguageType(language, "Cadena", "String", "Texto") ?? integerType;
 
         return
         [
@@ -2118,8 +2129,8 @@ public partial class MainWindow : Window
                 $"Declara datos con {declare} y guarda valores con <-.",
                 $"""
 {algorithm} Variables
-    {declare} edad {typeSeparator} Entero
-    {declare} nombre {typeSeparator} Cadena
+    {declare} edad {typeSeparator} {integerType}
+    {declare} nombre {typeSeparator} {textType}
 
     nombre <- "Ada"
     edad <- 19
@@ -2133,7 +2144,7 @@ public partial class MainWindow : Window
                 $"{read} pausa la ejecucion hasta que escribas un valor en la consola.",
                 $"""
 {algorithm} EntradaSalida
-    {declare} numero {typeSeparator} Entero
+    {declare} numero {typeSeparator} {integerType}
 
     {read} numero
     {write} "Numero recibido: ", numero
@@ -2144,7 +2155,7 @@ public partial class MainWindow : Window
                 "Puedes combinar numeros y variables en expresiones aritmeticas.",
                 $"""
 {algorithm} Operaciones
-    {declare} a, b, total {typeSeparator} Entero
+    {declare} a, b, total {typeSeparator} {integerType}
 
     a <- 8
     b <- 4
@@ -2155,6 +2166,11 @@ public partial class MainWindow : Window
 """)
         ];
     }
+
+    private static string? FindLanguageType(PseudoLanguageDefinition language, params string[] preferred) =>
+        preferred
+            .Select(name => language.Types.FirstOrDefault(type => type.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(type => !string.IsNullOrWhiteSpace(type));
 
     private static readonly IReadOnlyDictionary<string, string> DarkTheme = new Dictionary<string, string>
     {

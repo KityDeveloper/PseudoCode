@@ -55,7 +55,16 @@ En la app puedes abrir el menu **Configuracion** para editar estos archivos sin 
 - **Configuracion > Configurar sintaxis**: edita dialectos.
 - **Configuracion > Carpeta de configuracion**: muestra la carpeta de usuario y crea plantillas.
 
-La experiencia es parecida a editar settings en VS Code: la app guarda una copia JSON en tu perfil de usuario y aplica los cambios al guardar desde el editor de configuracion.
+La experiencia es parecida a editar settings en VS Code: la app guarda una copia JSON en tu perfil de usuario y aplica los cambios con **Guardar y aplicar**, sin reiniciar la app.
+
+Cuando guardas un dialecto desde **Configurar sintaxis**, la app lee el campo `id`, actualiza `default-settings.json` y vuelve a cargar:
+
+- Palabras reservadas del editor.
+- Validacion y subrayado de errores.
+- Autocompletado y plantillas rapidas.
+- Listado y ejemplos del panel de ayuda.
+
+Cuando guardas un tema desde **Temas para el codigo fuente**, la app lee el campo `id`, actualiza el tema del modo activo y repinta el editor al momento. Si estas en modo oscuro cambia `syntaxThemeDark`; si estas en modo claro cambia `syntaxThemeLight`.
 
 Tambien puedes abrir **Configuracion > Carpeta de configuracion** para:
 
@@ -170,7 +179,9 @@ Si un JSON falta, tiene formato invalido o no contiene campos requeridos, Pseudo
 "write": "Mostrar"
 ```
 
-3. Cambia el settings de usuario:
+3. Guarda desde **Configuracion > Configurar sintaxis** con **Guardar y aplicar**.
+
+La app actualiza automaticamente el settings de usuario para seleccionar el dialecto:
 
 ```json
 {
@@ -183,7 +194,5 @@ Si un JSON falta, tiene formato invalido o no contiene campos requeridos, Pseudo
   }
 }
 ```
-
-4. Guarda desde el editor de configuracion. Los cambios se aplican al momento.
 
 Ahora el dialecto acepta `Mostrar "Hola"` y ya no acepta `Escribir "Hola"`.

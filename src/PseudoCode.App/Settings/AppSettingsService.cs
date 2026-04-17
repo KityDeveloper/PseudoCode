@@ -12,6 +12,8 @@ internal sealed record RuntimeSettings(
 
 internal sealed record JsonConfigTarget(string Title, string RelativePath, string FullPath, string Template);
 
+internal sealed record JsonConfigApplyResult(string SavedPath, string Message);
+
 internal static class AppSettingsService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -46,10 +48,13 @@ internal static class AppSettingsService
     public static IReadOnlyList<JsonConfigTarget> GetConfigTargets(RuntimeSettings settings) =>
     [
         new("Settings", "default-settings.json", Path.Combine(settings.UserSettingsPath, "default-settings.json"), DefaultSettingsTemplate),
+        new("Dialecto PSeInt", "dialects/pseint.json", Path.Combine(settings.UserSettingsPath, "dialects", "pseint.json"), PseIntDialectTemplate),
         new("Dialecto custom", "dialects/custom.json", Path.Combine(settings.UserSettingsPath, "dialects", "custom.json"), CustomDialectTemplate),
         new("Dialecto PSeInt compatible", "dialects/pseint-compatible.json", Path.Combine(settings.UserSettingsPath, "dialects", "pseint-compatible.json"), PseIntCompatibleDialectTemplate),
         new("Dialecto simple ejemplo", "dialects/simple.json", Path.Combine(settings.UserSettingsPath, "dialects", "simple.json"), SimpleDialectTemplate),
         new("Dialecto English ejemplo", "dialects/english.json", Path.Combine(settings.UserSettingsPath, "dialects", "english.json"), EnglishDialectTemplate),
+        new("Tema dark", "syntax-themes/dark.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "dark.json"), DarkThemeTemplate),
+        new("Tema light", "syntax-themes/light.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "light.json"), LightThemeTemplate),
         new("Tema custom dark", "syntax-themes/custom-dark.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "custom-dark.json"), CustomDarkThemeTemplate),
         new("Tema high contrast", "syntax-themes/high-contrast.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "high-contrast.json"), HighContrastThemeTemplate),
         new("Tema sunset", "syntax-themes/sunset.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "sunset.json"), SunsetThemeTemplate)
@@ -93,6 +98,125 @@ internal static class AppSettingsService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(target.FullPath)!);
         File.WriteAllText(target.FullPath, json.TrimEnd() + Environment.NewLine);
+    }
+
+    public static JsonConfigApplyResult SaveAndSelectTarget(RuntimeSettings settings, JsonConfigTarget target, string json, bool applyToLightTheme)
+    {
+        var saveTarget = ResolveTargetPathFromJsonId(settings, target, json);
+        SaveTarget(saveTarget, json);
+
+        if (IsDialectTarget(saveTarget))
+        {
+            var id = ReadRequiredJsonId(json);
+            UpdateUserSettings(settings.UserSettingsPath, appSettings => appSettings.Language.ActiveDialect = id);
+            return new JsonConfigApplyResult(saveTarget.FullPath, $"Guardado y aplicado: dialecto '{id}'.");
+        }
+
+        if (IsSyntaxThemeTarget(saveTarget))
+        {
+            var id = ReadRequiredJsonId(json);
+            UpdateUserSettings(settings.UserSettingsPath, appSettings =>
+            {
+                if (applyToLightTheme)
+                {
+                    appSettings.Editor.SyntaxThemeLight = id;
+                }
+                else
+                {
+                    appSettings.Editor.SyntaxThemeDark = id;
+                }
+            });
+
+            var mode = applyToLightTheme ? "modo claro" : "modo oscuro";
+            return new JsonConfigApplyResult(saveTarget.FullPath, $"Guardado y aplicado: tema '{id}' para {mode}.");
+        }
+
+        return new JsonConfigApplyResult(saveTarget.FullPath, $"Guardado y aplicado: {saveTarget.RelativePath}.");
+    }
+
+    public static bool TryReadJsonId(string json, out string id, out string error)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+
+            if (document.RootElement.TryGetProperty("id", out var idElement) &&
+                idElement.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(idElement.GetString()))
+            {
+                id = idElement.GetString()!.Trim();
+                error = string.Empty;
+                return true;
+            }
+
+            id = string.Empty;
+            error = "El JSON no tiene un campo 'id' valido.";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            id = string.Empty;
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static JsonConfigTarget ResolveTargetPathFromJsonId(RuntimeSettings settings, JsonConfigTarget target, string json)
+    {
+        if (!IsDialectTarget(target) && !IsSyntaxThemeTarget(target))
+        {
+            return target;
+        }
+
+        var id = ReadRequiredJsonId(json);
+        var folder = IsDialectTarget(target) ? "dialects" : "syntax-themes";
+        var path = Path.Combine(settings.UserSettingsPath, folder, $"{id}.json");
+        return target with
+        {
+            RelativePath = $"{folder}/{id}.json",
+            FullPath = path
+        };
+    }
+
+    private static string ReadRequiredJsonId(string json)
+    {
+        if (TryReadJsonId(json, out var id, out var error))
+        {
+            return id;
+        }
+
+        throw new InvalidOperationException(error);
+    }
+
+    private static bool IsDialectTarget(JsonConfigTarget target) =>
+        target.RelativePath.StartsWith("dialects/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSyntaxThemeTarget(JsonConfigTarget target) =>
+        target.RelativePath.StartsWith("syntax-themes/", StringComparison.OrdinalIgnoreCase);
+
+    private static void UpdateUserSettings(string userSettingsPath, Action<AppSettingsDto> update)
+    {
+        EnsureUserSettingsFolders(userSettingsPath);
+        var path = Path.Combine(userSettingsPath, "default-settings.json");
+        var settings = AppSettingsDto.CreateDefault();
+        if (File.Exists(path))
+        {
+            try
+            {
+                settings = JsonSerializer.Deserialize<AppSettingsDto>(File.ReadAllText(path), JsonOptions) ?? AppSettingsDto.CreateDefault();
+            }
+            catch
+            {
+                settings = AppSettingsDto.CreateDefault();
+            }
+        }
+
+        update(settings);
+        File.WriteAllText(path, JsonSerializer.Serialize(settings, JsonOptions) + Environment.NewLine);
     }
 
     private static void EnsureUserSettingsFolders(string userSettingsPath)
@@ -251,6 +375,44 @@ internal static class AppSettingsService
     }
     """;
 
+    public const string PseIntDialectTemplate = """
+    {
+      "id": "pseint",
+      "displayName": "PSeInt",
+      "keywords": {
+        "algorithmStart": "Algoritmo",
+        "algorithmEnd": "FinAlgoritmo",
+        "processStart": "Proceso",
+        "processEnd": "FinProceso",
+        "declare": "Definir",
+        "typeSeparator": "Como",
+        "write": "Escribir",
+        "read": "Leer",
+        "if": "Si",
+        "then": "Entonces",
+        "else": "Sino",
+        "endIf": "FinSi",
+        "while": "Mientras",
+        "do": "Hacer",
+        "endWhile": "FinMientras",
+        "for": "Para",
+        "until": "Hasta",
+        "step": "Paso",
+        "endFor": "FinPara",
+        "switch": "Segun",
+        "otherwise": "De Otro Modo",
+        "endSwitch": "FinSegun",
+        "true": "Verdadero",
+        "false": "Falso",
+        "and": "Y",
+        "or": "O",
+        "not": "NO"
+      },
+      "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
+      "snippets": []
+    }
+    """;
+
     public const string PseIntCompatibleDialectTemplate = """
     {
       "id": "pseint-compatible",
@@ -378,6 +540,40 @@ internal static class AppSettingsService
         "comment": "#6A9955",
         "blockBackground": "#1F3B4D",
         "diagnosticUnderline": "#FF4D4D"
+      }
+    }
+    """;
+
+    public const string DarkThemeTemplate = """
+    {
+      "id": "dark",
+      "displayName": "Dark",
+      "syntax": {
+        "keyword": "#5EA1FF",
+        "type": "#4EC9B0",
+        "string": "#CE9178",
+        "number": "#B5CEA8",
+        "operator": "#DCDCAA",
+        "comment": "#6A9955",
+        "blockBackground": "#1F3B4D",
+        "diagnosticUnderline": "#FF4D4D"
+      }
+    }
+    """;
+
+    public const string LightThemeTemplate = """
+    {
+      "id": "light",
+      "displayName": "Light",
+      "syntax": {
+        "keyword": "#0645AD",
+        "type": "#00796B",
+        "string": "#A31515",
+        "number": "#098658",
+        "operator": "#795E26",
+        "comment": "#008000",
+        "blockBackground": "#EAF3FF",
+        "diagnosticUnderline": "#DC2626"
       }
     }
     """;
