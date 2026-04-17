@@ -1,0 +1,14 @@
+{
+  "id": "sunset",
+  "displayName": "Sunset",
+  "syntax": {
+    "keyword": "#FF6B6B",
+    "type": "#2EC4B6",
+    "string": "#FFD166",
+    "number": "#8AC926",
+    "operator": "#E0E0E0",
+    "comment": "#7BD88F",
+    "blockBackground": "#30343F",
+    "diagnosticUnderline": "#EF233C"
+  }
+}

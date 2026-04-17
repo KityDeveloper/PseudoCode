@@ -10,6 +10,8 @@ internal sealed record RuntimeSettings(
     IReadOnlyList<string> Diagnostics,
     string UserSettingsPath);
 
+internal sealed record JsonConfigTarget(string Title, string RelativePath, string FullPath, string Template);
+
 internal static class AppSettingsService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -25,9 +27,7 @@ internal static class AppSettingsService
         var diagnostics = new List<string>();
         var baseSettingsPath = Path.Combine(AppContext.BaseDirectory, "settings");
         var userSettingsPath = GetUserSettingsPath();
-        Directory.CreateDirectory(userSettingsPath);
-        Directory.CreateDirectory(Path.Combine(userSettingsPath, "dialects"));
-        Directory.CreateDirectory(Path.Combine(userSettingsPath, "syntax-themes"));
+        EnsureUserSettingsFolders(userSettingsPath);
 
         var settings = LoadSettingsFile(Path.Combine(baseSettingsPath, "default-settings.json"), diagnostics) ?? AppSettingsDto.CreateDefault();
         var userSettingsFile = Path.Combine(userSettingsPath, "default-settings.json");
@@ -43,103 +43,63 @@ internal static class AppSettingsService
         return new RuntimeSettings(language, dark, light, diagnostics, userSettingsPath);
     }
 
+    public static IReadOnlyList<JsonConfigTarget> GetConfigTargets(RuntimeSettings settings) =>
+    [
+        new("Settings", "default-settings.json", Path.Combine(settings.UserSettingsPath, "default-settings.json"), DefaultSettingsTemplate),
+        new("Dialecto custom", "dialects/custom.json", Path.Combine(settings.UserSettingsPath, "dialects", "custom.json"), CustomDialectTemplate),
+        new("Dialecto PSeInt compatible", "dialects/pseint-compatible.json", Path.Combine(settings.UserSettingsPath, "dialects", "pseint-compatible.json"), PseIntCompatibleDialectTemplate),
+        new("Dialecto simple ejemplo", "dialects/simple.json", Path.Combine(settings.UserSettingsPath, "dialects", "simple.json"), SimpleDialectTemplate),
+        new("Dialecto English ejemplo", "dialects/english.json", Path.Combine(settings.UserSettingsPath, "dialects", "english.json"), EnglishDialectTemplate),
+        new("Tema custom dark", "syntax-themes/custom-dark.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "custom-dark.json"), CustomDarkThemeTemplate),
+        new("Tema high contrast", "syntax-themes/high-contrast.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "high-contrast.json"), HighContrastThemeTemplate),
+        new("Tema sunset", "syntax-themes/sunset.json", Path.Combine(settings.UserSettingsPath, "syntax-themes", "sunset.json"), SunsetThemeTemplate)
+    ];
+
     public static IReadOnlyList<string> CreateUserTemplateFiles(RuntimeSettings settings)
     {
         var written = new List<string>();
-        Directory.CreateDirectory(settings.UserSettingsPath);
-        Directory.CreateDirectory(Path.Combine(settings.UserSettingsPath, "dialects"));
-        Directory.CreateDirectory(Path.Combine(settings.UserSettingsPath, "syntax-themes"));
-
-        WriteIfMissing(
-            Path.Combine(settings.UserSettingsPath, "default-settings.json"),
-            """
-            {
-              "language": {
-                "activeDialect": "custom"
-              },
-              "editor": {
-                "syntaxThemeDark": "custom-dark",
-                "syntaxThemeLight": "light"
-              }
-            }
-            """,
-            written);
-
-        WriteIfMissing(
-            Path.Combine(settings.UserSettingsPath, "dialects", "custom.json"),
-            """
-            {
-              "id": "custom",
-              "displayName": "Custom",
-              "keywords": {
-                "algorithmStart": "Algoritmo",
-                "algorithmEnd": "FinAlgoritmo",
-                "processStart": "Proceso",
-                "processEnd": "FinProceso",
-                "declare": "Definir",
-                "typeSeparator": "Como",
-                "write": "Mostrar",
-                "read": "Pedir",
-                "if": "Si",
-                "then": "Entonces",
-                "else": "Sino",
-                "endIf": "FinSi",
-                "while": "Mientras",
-                "do": "Hacer",
-                "endWhile": "FinMientras",
-                "for": "Para",
-                "until": "Hasta",
-                "step": "Paso",
-                "endFor": "FinPara",
-                "switch": "Segun",
-                "otherwise": "De Otro Modo",
-                "endSwitch": "FinSegun",
-                "true": "Verdadero",
-                "false": "Falso",
-                "and": "Y",
-                "or": "O",
-                "not": "NO"
-              },
-              "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
-              "snippets": [
-                {
-                  "text": "Algoritmo",
-                  "insertText": "Algoritmo MiPrograma\n    \nFinAlgoritmo",
-                  "description": "Define el inicio y fin de un algoritmo.",
-                  "isTemplate": true
-                },
-                {
-                  "text": "Mostrar",
-                  "insertText": "Mostrar \"Mensaje\", variable",
-                  "description": "Muestra texto o valores en la salida.",
-                  "isTemplate": true
-                }
-              ]
-            }
-            """,
-            written);
-
-        WriteIfMissing(
-            Path.Combine(settings.UserSettingsPath, "syntax-themes", "custom-dark.json"),
-            """
-            {
-              "id": "custom-dark",
-              "displayName": "Custom Dark",
-              "syntax": {
-                "keyword": "#5EA1FF",
-                "type": "#4EC9B0",
-                "string": "#CE9178",
-                "number": "#B5CEA8",
-                "operator": "#DCDCAA",
-                "comment": "#6A9955",
-                "blockBackground": "#1F3B4D",
-                "diagnosticUnderline": "#FF4D4D"
-              }
-            }
-            """,
-            written);
+        EnsureUserSettingsFolders(settings.UserSettingsPath);
+        foreach (var target in GetConfigTargets(settings))
+        {
+            WriteIfMissing(target.FullPath, target.Template, written);
+        }
 
         return written;
+    }
+
+    public static bool IsValidJson(string json, out string error)
+    {
+        try
+        {
+            using var _ = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static string ReadOrTemplate(JsonConfigTarget target) =>
+        File.Exists(target.FullPath) ? File.ReadAllText(target.FullPath) : target.Template.Trim() + Environment.NewLine;
+
+    public static void SaveTarget(JsonConfigTarget target, string json)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(target.FullPath)!);
+        File.WriteAllText(target.FullPath, json.TrimEnd() + Environment.NewLine);
+    }
+
+    private static void EnsureUserSettingsFolders(string userSettingsPath)
+    {
+        Directory.CreateDirectory(userSettingsPath);
+        Directory.CreateDirectory(Path.Combine(userSettingsPath, "dialects"));
+        Directory.CreateDirectory(Path.Combine(userSettingsPath, "syntax-themes"));
     }
 
     private static void WriteIfMissing(string path, string content, List<string> written)
@@ -149,6 +109,7 @@ internal static class AppSettingsService
             return;
         }
 
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content.Trim() + Environment.NewLine);
         written.Add(path);
     }
@@ -239,6 +200,221 @@ internal static class AppSettingsService
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "PseudoCode", "settings")
             : Path.Combine(configHome, "PseudoCode", "settings");
     }
+
+    public const string DefaultSettingsTemplate = """
+    {
+      "language": {
+        "activeDialect": "custom"
+      },
+      "editor": {
+        "syntaxThemeDark": "custom-dark",
+        "syntaxThemeLight": "light"
+      }
+    }
+    """;
+
+    public const string CustomDialectTemplate = """
+    {
+      "id": "custom",
+      "displayName": "Custom",
+      "keywords": {
+        "algorithmStart": "Algoritmo",
+        "algorithmEnd": "FinAlgoritmo",
+        "processStart": "Proceso",
+        "processEnd": "FinProceso",
+        "declare": "Definir",
+        "typeSeparator": "Como",
+        "write": "Mostrar",
+        "read": "Pedir",
+        "if": "Si",
+        "then": "Entonces",
+        "else": "Sino",
+        "endIf": "FinSi",
+        "while": "Mientras",
+        "do": "Hacer",
+        "endWhile": "FinMientras",
+        "for": "Para",
+        "until": "Hasta",
+        "step": "Paso",
+        "endFor": "FinPara",
+        "switch": "Segun",
+        "otherwise": "De Otro Modo",
+        "endSwitch": "FinSegun",
+        "true": "Verdadero",
+        "false": "Falso",
+        "and": "Y",
+        "or": "O",
+        "not": "NO"
+      },
+      "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
+      "snippets": []
+    }
+    """;
+
+    public const string PseIntCompatibleDialectTemplate = """
+    {
+      "id": "pseint-compatible",
+      "displayName": "PSeInt Compatible",
+      "keywords": {
+        "algorithmStart": "Algoritmo",
+        "algorithmEnd": "FinAlgoritmo",
+        "processStart": "Proceso",
+        "processEnd": "FinProceso",
+        "declare": "Definir",
+        "typeSeparator": "Como",
+        "write": "Escribir",
+        "read": "Leer",
+        "if": "Si",
+        "then": "Entonces",
+        "else": "Sino",
+        "endIf": "FinSi",
+        "while": "Mientras",
+        "do": "Hacer",
+        "endWhile": "FinMientras",
+        "for": "Para",
+        "until": "Hasta",
+        "step": "Paso",
+        "endFor": "FinPara",
+        "switch": "Segun",
+        "otherwise": "De Otro Modo",
+        "endSwitch": "FinSegun",
+        "true": "Verdadero",
+        "false": "Falso",
+        "and": "Y",
+        "or": "O",
+        "not": "NO"
+      },
+      "types": ["Entero", "Real", "Cadena", "Caracter", "Logico", "Booleano"],
+      "snippets": []
+    }
+    """;
+
+    public const string SimpleDialectTemplate = """
+    {
+      "id": "simple",
+      "displayName": "Simple",
+      "keywords": {
+        "algorithmStart": "Inicio",
+        "algorithmEnd": "Fin",
+        "processStart": "Proceso",
+        "processEnd": "FinProceso",
+        "declare": "Variable",
+        "typeSeparator": "Tipo",
+        "write": "Mostrar",
+        "read": "Pedir",
+        "if": "Si",
+        "then": "Entonces",
+        "else": "Sino",
+        "endIf": "FinSi",
+        "while": "Mientras",
+        "do": "Hacer",
+        "endWhile": "FinMientras",
+        "for": "Para",
+        "until": "Hasta",
+        "step": "Paso",
+        "endFor": "FinPara",
+        "switch": "Segun",
+        "otherwise": "Otro",
+        "endSwitch": "FinSegun",
+        "true": "Verdadero",
+        "false": "Falso",
+        "and": "Y",
+        "or": "O",
+        "not": "NO"
+      },
+      "types": ["Entero", "Real", "Texto", "Logico"],
+      "snippets": []
+    }
+    """;
+
+    public const string EnglishDialectTemplate = """
+    {
+      "id": "english",
+      "displayName": "English",
+      "keywords": {
+        "algorithmStart": "Algorithm",
+        "algorithmEnd": "EndAlgorithm",
+        "processStart": "Process",
+        "processEnd": "EndProcess",
+        "declare": "Define",
+        "typeSeparator": "As",
+        "write": "Write",
+        "read": "Read",
+        "if": "If",
+        "then": "Then",
+        "else": "Else",
+        "endIf": "EndIf",
+        "while": "While",
+        "do": "Do",
+        "endWhile": "EndWhile",
+        "for": "For",
+        "until": "To",
+        "step": "Step",
+        "endFor": "EndFor",
+        "switch": "Switch",
+        "otherwise": "Otherwise",
+        "endSwitch": "EndSwitch",
+        "true": "True",
+        "false": "False",
+        "and": "AND",
+        "or": "OR",
+        "not": "NOT"
+      },
+      "types": ["Integer", "Real", "String", "Character", "Logical", "Boolean"],
+      "snippets": []
+    }
+    """;
+
+    public const string CustomDarkThemeTemplate = """
+    {
+      "id": "custom-dark",
+      "displayName": "Custom Dark",
+      "syntax": {
+        "keyword": "#5EA1FF",
+        "type": "#4EC9B0",
+        "string": "#CE9178",
+        "number": "#B5CEA8",
+        "operator": "#DCDCAA",
+        "comment": "#6A9955",
+        "blockBackground": "#1F3B4D",
+        "diagnosticUnderline": "#FF4D4D"
+      }
+    }
+    """;
+
+    public const string HighContrastThemeTemplate = """
+    {
+      "id": "high-contrast",
+      "displayName": "High Contrast",
+      "syntax": {
+        "keyword": "#00B7FF",
+        "type": "#00D084",
+        "string": "#FFD166",
+        "number": "#EF476F",
+        "operator": "#F8F8F2",
+        "comment": "#8BE9A6",
+        "blockBackground": "#14324A",
+        "diagnosticUnderline": "#FF2E2E"
+      }
+    }
+    """;
+
+    public const string SunsetThemeTemplate = """
+    {
+      "id": "sunset",
+      "displayName": "Sunset",
+      "syntax": {
+        "keyword": "#FF6B6B",
+        "type": "#2EC4B6",
+        "string": "#FFD166",
+        "number": "#8AC926",
+        "operator": "#E0E0E0",
+        "comment": "#7BD88F",
+        "blockBackground": "#30343F",
+        "diagnosticUnderline": "#EF233C"
+      }
+    }
+    """;
 }
 
 internal sealed class AppSettingsDto

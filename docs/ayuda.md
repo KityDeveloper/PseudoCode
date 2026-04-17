@@ -57,7 +57,12 @@ Si editas el codigo, la sesion de depuracion se detiene para evitar que el paso 
 
 El lenguaje activo y los colores de sintaxis se pueden cambiar con JSON. Lee [Configuracion JSON](configuracion-json.md) para ver rutas, ejemplos y reglas.
 
-Desde la app tambien puedes abrir **Ayuda > Configurar temas y dialectos** para ver la carpeta de settings, crear plantillas JSON y copiar la ruta de configuracion.
+Desde la app tambien puedes usar el menu **Configuracion**:
+
+- **Settings JSON** edita el archivo principal de settings.
+- **Temas para el codigo fuente** edita temas de sintaxis.
+- **Configurar sintaxis** edita dialectos.
+- **Carpeta de configuracion** muestra rutas y crea plantillas JSON.
 
 ## Mas documentacion
 

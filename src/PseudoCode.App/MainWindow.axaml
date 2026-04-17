@@ -81,13 +81,19 @@
               <MenuItem Header="Paso a paso (F10)" Click="StepDebug_Click" />
               <MenuItem Header="Detener depuración" Click="StopDebug_Click" />
             </MenuItem>
+            <MenuItem Header="Configuración">
+              <MenuItem Header="Settings JSON" Click="SettingsJson_Click" />
+              <MenuItem Header="Temas para el código fuente" Click="SourceThemes_Click" />
+              <MenuItem Header="Configurar sintaxis" Click="SyntaxConfiguration_Click" />
+              <Separator />
+              <MenuItem Header="Carpeta de configuración" Click="SettingsConfiguration_Click" />
+            </MenuItem>
             <MenuItem Header="Ayuda">
               <MenuItem Header="Mostrar u ocultar ayuda" Click="ToggleHelp_Click" />
               <MenuItem Header="Cargar ejemplo inicial" Click="LoadFirstHelpExample_Click" />
               <Separator />
               <MenuItem Header="Documentación" Click="Documentation_Click" />
               <MenuItem Header="Configuración JSON" Click="JsonConfiguration_Click" />
-              <MenuItem Header="Configurar temas y dialectos" Click="SettingsConfiguration_Click" />
               <MenuItem Header="Notas de versión" Click="ReleaseNotes_Click" />
               <Separator />
               <MenuItem Header="Acerca de PseudoCode" Click="About_Click" />

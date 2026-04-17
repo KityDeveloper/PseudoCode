@@ -33,7 +33,19 @@ internal sealed class OpenDocument
     public HashSet<int> DiagnosticLines { get; set; } = [];
     public bool HasUnsavedChanges { get; set; }
     public ExecutionResult? LastExecutionResult { get; set; }
-    public AdvancedPseudoInterpreter Interpreter { get; }
+    public AdvancedPseudoInterpreter Interpreter { get; private set; }
     public bool IsDebugging { get; set; }
     public int? DebugLine { get; set; }
+
+    public void ApplyLanguage(PseudoLanguageDefinition language)
+    {
+        Interpreter = new AdvancedPseudoInterpreter(language);
+        LastExecutionResult = null;
+        OutputText = string.Empty;
+        DiagnosticsText = "Sin diagnosticos.";
+        VariablesText = string.Empty;
+        DiagnosticLines.Clear();
+        IsDebugging = false;
+        DebugLine = null;
+    }
 }

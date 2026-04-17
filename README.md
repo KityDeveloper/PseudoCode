@@ -1,13 +1,15 @@
 # PseudoCode
 
-> Editor educativo para escribir, ejecutar y aprender pseudocodigo en espanol.
+![PseudoCode](resources/images/logoPseudoCode.png)
+
+> Editor educativo para escribir, ejecutar y aprender pseudocodigo en español.
 
 [![Version](https://img.shields.io/badge/version-2.0.3--beta.1-blue)](CHANGELOG.md)
 [![Estado](https://img.shields.io/badge/estado-beta-orange)](CHANGELOG.md)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-lightgrey)](#descargas)
 [![Releases](https://img.shields.io/badge/descargar-releases-brightgreen)](https://github.com/KityDeveloper/PseudoCode/releases/latest)
 
-PseudoCode es una app de escritorio para practicar logica de programacion con pseudocodigo en espanol. Esta pensada para estudiantes, profesores y personas que quieren probar algoritmos sin configurar un lenguaje de programacion completo.
+PseudoCode es una app de escritorio para practicar logica de programacion con pseudocodigo en español. Esta pensada para estudiantes, profesores y personas que quieren probar algoritmos sin configurar un lenguaje de programacion completo.
 
 El dialecto principal sigue el estilo de **PSeInt**, con editor moderno, multiples archivos, diagnosticos, salida, variables, ayuda integrada y configuracion por JSON.
 
@@ -20,9 +22,11 @@ El dialecto principal sigue el estilo de **PSeInt**, con editor moderno, multipl
 
 ## Capturas
 
+![PseudoCode](./docs/assets/screenshots/pseudoCode.png)
+
 > Placeholder: editor principal
 
-![Editor principal](docs/assets/screenshots/editor-principal.png)
+![Editor principal](./docs/assets/screenshots/editor-principal.png)
 
 > Placeholder: ejecucion, salida y variables
 
@@ -62,7 +66,7 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 
 ## Funciones principales
 
-- Editor de pseudocodigo en espanol.
+- Editor de pseudocodigo en español.
 - Dialecto principal estilo PSeInt.
 - Ejecucion de algoritmos con salida y variables.
 - Depuracion paso a paso con `F10`.
@@ -74,7 +78,7 @@ PseudoCode ayuda a escribir y ejecutar ejercicios de pseudocodigo mientras se ap
 - Documentacion Markdown renderizada dentro de la app.
 - Dialectos JSON reemplazables.
 - Colores de sintaxis configurables.
-- Ventana para configurar temas y dialectos desde **Ayuda > Configurar temas y dialectos**.
+- Menu **Configuracion** para editar settings, temas y dialectos como JSON.
 - Modo claro y modo oscuro.
 
 ## Descargas
@@ -119,6 +123,8 @@ PseudoCode esta en beta. La base ya permite editar, abrir varios archivos, ejecu
 ## Autor
 
 Creado por **Kity Dev**.
+
+![Kity Dev](resources/images/iconKityDev.png)
 
 - YouTube: [@KityDev](https://www.youtube.com/@KityDev)
 - GitHub: [KityDeveloper](https://github.com/KityDeveloper)

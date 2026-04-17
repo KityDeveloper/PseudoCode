@@ -28,11 +28,12 @@ public partial class MainWindow : Window
     private const double InterfaceScaleStep = 0.1;
 
     private readonly List<OpenDocument> _openDocuments = [];
-    private readonly RuntimeSettings _runtimeSettings;
-    private readonly PseudoLanguageDefinition _language;
-    private readonly PseudoSyntaxValidator _syntaxValidator;
-    private readonly CommandInfo[] _completionItems;
-    private readonly HelpTopic[] _helpTopics;
+    private RuntimeSettings _runtimeSettings;
+    private PseudoLanguageDefinition _language;
+    private PseudoSyntaxValidator _syntaxValidator;
+    private CommandInfo[] _completionItems;
+    private CommandInfo[] _quickTemplates;
+    private HelpTopic[] _helpTopics;
     private OpenDocument? _currentDocument;
     private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
         _language = _runtimeSettings.Language;
         _syntaxValidator = new PseudoSyntaxValidator(_language);
         _completionItems = _language.Snippets.ToArray();
+        _quickTemplates = _language.BuildQuickTemplates().ToArray();
         _helpTopics = BuildDefaultHelpTopics(_language);
         InitializeComponent();
         ConfigureEditor();
@@ -286,6 +288,21 @@ public partial class MainWindow : Window
         await ShowSettingsConfigurationAsync();
     }
 
+    private async void SettingsJson_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowJsonSettingsEditorAsync("Settings JSON", target => target.RelativePath.Equals("default-settings.json", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async void SourceThemes_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowJsonSettingsEditorAsync("Temas para el codigo fuente", target => target.RelativePath.StartsWith("syntax-themes/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async void SyntaxConfiguration_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowJsonSettingsEditorAsync("Configurar sintaxis", target => target.RelativePath.StartsWith("dialects/", StringComparison.OrdinalIgnoreCase));
+    }
+
     private async void ReleaseNotes_Click(object? sender, RoutedEventArgs e)
     {
         await ShowDocumentationAsync(DocumentationService.ReleaseNotes);
@@ -294,6 +311,243 @@ public partial class MainWindow : Window
     private async Task ShowDocumentationAsync(DocumentationPage page)
     {
         var window = DocumentationService.BuildWindow(page, _isLightTheme ? LightTheme : DarkTheme);
+        await window.ShowDialog(this);
+    }
+
+    private async Task ShowJsonSettingsEditorAsync(string title, Func<JsonConfigTarget, bool> filter)
+    {
+        var targets = AppSettingsService.GetConfigTargets(_runtimeSettings).Where(filter).ToArray();
+        if (targets.Length == 0)
+        {
+            UpdateWindowState("No hay archivos JSON configurables para esta seccion");
+            return;
+        }
+
+        var selectedTarget = targets[0];
+        var status = new TextBlock
+        {
+            Text = "Edita el JSON y guarda. Los cambios se aplican al momento.",
+            Foreground = Brush("TextSecondary"),
+            TextWrapping = TextWrapping.Wrap
+        };
+
+        var fileLabel = new TextBlock
+        {
+            Text = selectedTarget.RelativePath,
+            Foreground = Brush("TextPrimary"),
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        };
+
+        var editor = new TextBox
+        {
+            Text = AppSettingsService.ReadOrTemplate(selectedTarget),
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+            FontSize = 13,
+            Background = Brush("InsetBackground"),
+            Foreground = Brush("TextPrimary"),
+            BorderBrush = Brush("BorderBrushMuted")
+        };
+        ScrollViewer.SetHorizontalScrollBarVisibility(editor, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+        ScrollViewer.SetVerticalScrollBarVisibility(editor, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+
+        void SelectTarget(JsonConfigTarget target)
+        {
+            selectedTarget = target;
+            fileLabel.Text = target.RelativePath;
+            editor.Text = AppSettingsService.ReadOrTemplate(target);
+            status.Text = File.Exists(target.FullPath)
+                ? $"Editando copia de usuario: {target.FullPath}"
+                : "Este archivo aun no existe en tu perfil. Guardar creara una copia editable.";
+        }
+
+        var targetList = new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(12)
+        };
+
+        foreach (var target in targets)
+        {
+            var button = new Button
+            {
+                Content = target.Title,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left
+            };
+            button.Click += (_, _) => SelectTarget(target);
+            targetList.Children.Add(button);
+        }
+
+        var validateButton = new Button { Content = "Validar JSON", Classes = { "command" } };
+        validateButton.Click += (_, _) =>
+        {
+            status.Text = AppSettingsService.IsValidJson(editor.Text ?? string.Empty, out var error)
+                ? "JSON valido."
+                : $"JSON invalido: {error}";
+        };
+
+        var saveButton = new Button { Content = "Guardar", Classes = { "command" } };
+        saveButton.Click += (_, _) =>
+        {
+            var json = editor.Text ?? string.Empty;
+            if (!AppSettingsService.IsValidJson(json, out var error))
+            {
+                status.Text = $"No se guardo. JSON invalido: {error}";
+                return;
+            }
+
+            AppSettingsService.SaveTarget(selectedTarget, json);
+            ReloadRuntimeSettings();
+            status.Text = $"Guardado y aplicado: {selectedTarget.FullPath}";
+        };
+
+        var loadButton = new Button { Content = "Cargar JSON...", Classes = { "command" } };
+        loadButton.Click += async (_, _) =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Cargar JSON",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("JSON")
+                    {
+                        Patterns = ["*.json"]
+                    },
+                    FilePickerFileTypes.All
+                ]
+            });
+
+            var file = files.FirstOrDefault();
+            if (file is null)
+            {
+                return;
+            }
+
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            editor.Text = await reader.ReadToEndAsync();
+            status.Text = $"JSON cargado desde: {file.Name}. Usa Guardar para copiarlo a {selectedTarget.RelativePath}.";
+        };
+
+        var resetButton = new Button { Content = "Usar plantilla", Classes = { "command" } };
+        resetButton.Click += (_, _) =>
+        {
+            editor.Text = selectedTarget.Template.Trim() + Environment.NewLine;
+            status.Text = "Plantilla cargada en el editor. Usa Guardar para escribirla.";
+        };
+
+        var openFolderButton = new Button { Content = "Abrir carpeta", Classes = { "command" } };
+        openFolderButton.Click += async (_, _) =>
+        {
+            if (!await OpenFolderAsync(_runtimeSettings.UserSettingsPath) && Clipboard is not null)
+            {
+                await Clipboard.SetTextAsync(_runtimeSettings.UserSettingsPath);
+                status.Text = "No pude abrir la carpeta; copie la ruta al portapapeles.";
+            }
+        };
+
+        var header = new Border
+        {
+            Background = Brush("PanelBackground"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(16, 12),
+            Child = new StackPanel
+            {
+                Spacing = 6,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = title,
+                        FontSize = 20,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = Brush("TextPrimary")
+                    },
+                    fileLabel
+                }
+            }
+        };
+        Grid.SetColumnSpan(header, 2);
+
+        var navigation = new Border
+        {
+            Background = Brush("PanelBackground"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Child = new ScrollViewer { Content = targetList }
+        };
+        Grid.SetRow(navigation, 1);
+
+        var editorPanel = new Border
+        {
+            Padding = new Thickness(12),
+            Child = editor
+        };
+        Grid.SetColumn(editorPanel, 1);
+        Grid.SetRow(editorPanel, 1);
+
+        var actionButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children =
+            {
+                loadButton,
+                resetButton,
+                validateButton,
+                saveButton,
+                openFolderButton
+            }
+        };
+        Grid.SetColumn(actionButtons, 1);
+
+        var footer = new Border
+        {
+            Background = Brush("PanelBackground"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12),
+            Child = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Children =
+                {
+                    status,
+                    actionButtons
+                }
+            }
+        };
+        Grid.SetColumnSpan(footer, 2);
+        Grid.SetRow(footer, 2);
+
+        var window = new Window
+        {
+            Title = title,
+            Width = 980,
+            Height = 720,
+            MinWidth = 760,
+            MinHeight = 520,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush("EditorBackground"),
+            Content = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("230,*"),
+                RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+                Children =
+                {
+                    header,
+                    navigation,
+                    editorPanel,
+                    footer
+                }
+            }
+        };
+
         await window.ShowDialog(this);
     }
 
@@ -313,7 +567,7 @@ public partial class MainWindow : Window
 
         var status = new TextBlock
         {
-            Text = "Edita los JSON y reinicia la app para aplicar los cambios.",
+            Text = "Edita los JSON y guarda desde el editor para aplicar los cambios al momento.",
             Foreground = Brush("TextSecondary"),
             TextWrapping = TextWrapping.Wrap
         };
@@ -333,7 +587,7 @@ public partial class MainWindow : Window
             var files = AppSettingsService.CreateUserTemplateFiles(_runtimeSettings);
             status.Text = files.Count == 0
                 ? "Las plantillas ya existian. Puedes editarlas en la carpeta de settings."
-                : $"Plantillas creadas: {files.Count}. Reinicia la app despues de editarlas.";
+                : $"Plantillas creadas: {files.Count}. Puedes editarlas y guardarlas desde Configuracion.";
         };
 
         var copyButton = new Button { Content = "Copiar ruta", Classes = { "command" } };
@@ -421,6 +675,47 @@ public partial class MainWindow : Window
             Content = content
         };
         await window.ShowDialog(this);
+    }
+
+    private void ReloadRuntimeSettings()
+    {
+        SaveCurrentDocumentState();
+        _runtimeSettings = AppSettingsService.Load();
+        _language = _runtimeSettings.Language;
+        _syntaxValidator = new PseudoSyntaxValidator(_language);
+        _completionItems = _language.Snippets.ToArray();
+        _quickTemplates = _language.BuildQuickTemplates().ToArray();
+        _helpTopics = BuildDefaultHelpTopics(_language);
+
+        foreach (var document in _openDocuments)
+        {
+            document.ApplyLanguage(_language);
+            _syntaxValidator.Validate(document.Text);
+            UpdateLiveSyntaxDiagnostics(document);
+        }
+
+        _completionWindow?.Close();
+        _colorizer?.SetLanguage(_language);
+        ApplyTheme(_isLightTheme ? LightTheme : DarkTheme);
+
+        HelpTopicsPanel.Children.Clear();
+        TemplatesPanel.Children.Clear();
+        BuildHelpTopics();
+        BuildEditorTools();
+
+        if (_currentDocument is not null)
+        {
+            VariablesTextBox.Text = string.Empty;
+            OutputTextBox.Text = string.Empty;
+            SwitchDocument(_currentDocument);
+            UpdateLiveSyntaxDiagnostics(_currentDocument);
+        }
+
+        UpdateVariablesList();
+        UpdateDiagnosticUnderlines();
+        RenderOpenDocuments();
+        UpdateOutputPanelView();
+        UpdateWindowState($"Configuracion aplicada: {_language.DisplayName}");
     }
 
     private async void About_Click(object? sender, RoutedEventArgs e)
@@ -1160,21 +1455,46 @@ public partial class MainWindow : Window
 
     private void Editor_DragOver(object? sender, DragEventArgs e)
     {
-        var hasFiles = e.DataTransfer.TryGetFiles()?.Any() == true;
-        e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
-        e.Handled = hasFiles;
+        try
+        {
+            var hasFiles = e.DataTransfer.TryGetFiles()?.Any() == true;
+            var hasText = e.DataTransfer.Contains(DataFormat.Text);
+            e.DragEffects = hasFiles ? DragDropEffects.Copy : hasText ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = hasFiles || hasText;
+        }
+        catch (Exception ex)
+        {
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            UpdateWindowState($"Drag cancelado: {ex.Message}");
+        }
     }
 
     private async void Editor_Drop(object? sender, DragEventArgs e)
     {
-        var file = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().FirstOrDefault();
-        if (file is null)
+        try
         {
-            return;
-        }
+            var file = e.DataTransfer.TryGetFiles()?.OfType<IStorageFile>().FirstOrDefault();
+            if (file is not null)
+            {
+                await LoadFileAsync(file);
+                e.Handled = true;
+                return;
+            }
 
-        await LoadFileAsync(file);
-        e.Handled = true;
+            var text = e.DataTransfer.TryGetText();
+            if (!string.IsNullOrEmpty(text))
+            {
+                InsertAtCaret(text);
+                e.Handled = true;
+                UpdateWindowState("Texto insertado");
+            }
+        }
+        catch (Exception ex)
+        {
+            e.Handled = true;
+            UpdateWindowState($"No pude soltar el contenido: {ex.Message}");
+        }
     }
 
     private void UpdateLineNumbers()
@@ -1444,7 +1764,7 @@ public partial class MainWindow : Window
 
     private void BuildEditorTools()
     {
-        foreach (var template in _completionItems.Where(item => item.IsTemplate))
+        foreach (var template in _quickTemplates)
         {
             var button = new Button
             {

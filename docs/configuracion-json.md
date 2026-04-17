@@ -48,13 +48,40 @@ macOS: ~/Library/Application Support/PseudoCode/settings/
 
 El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`.
 
-En la app puedes abrir **Ayuda > Configurar temas y dialectos** para:
+En la app puedes abrir el menu **Configuracion** para editar estos archivos sin salir de PseudoCode:
+
+- **Configuracion > Settings JSON**: edita `default-settings.json`.
+- **Configuracion > Temas para el codigo fuente**: edita temas de sintaxis.
+- **Configuracion > Configurar sintaxis**: edita dialectos.
+- **Configuracion > Carpeta de configuracion**: muestra la carpeta de usuario y crea plantillas.
+
+La experiencia es parecida a editar settings en VS Code: la app guarda una copia JSON en tu perfil de usuario y aplica los cambios al guardar desde el editor de configuracion.
+
+Tambien puedes abrir **Configuracion > Carpeta de configuracion** para:
 
 - Ver el dialecto activo.
 - Ver el tema oscuro y claro activos.
 - Copiar la ruta de settings de usuario.
 - Crear plantillas `default-settings.json`, `dialects/custom.json` y `syntax-themes/custom-dark.json`.
 - Abrir esta guia de configuracion.
+
+## JSON alternativos incluidos
+
+PseudoCode incluye varios ejemplos listos para copiar o seleccionar:
+
+Dialectos:
+
+- `pseint`: dialecto principal estilo PSeInt.
+- `pseint-compatible`: variante compatible con palabras base de PSeInt para intercambiar algoritmos.
+- `simple`: dialecto de ejemplo para ver como se reemplazan palabras del lenguaje; no busca compatibilidad con PSeInt.
+- `english`: dialecto de ejemplo basado en PSeInt pero traducido al ingles, con `Algorithm`, `Write`, `Read`, `If`, `While`, `For` y `Switch`.
+
+Temas:
+
+- `dark`: tema principal.
+- `light`: tema para modo claro.
+- `high-contrast`: colores de alto contraste.
+- `sunset`: paleta alternativa para experimentar.
 
 ## Dialectos
 
@@ -157,6 +184,6 @@ Si un JSON falta, tiene formato invalido o no contiene campos requeridos, Pseudo
 }
 ```
 
-4. Reinicia la app.
+4. Guarda desde el editor de configuracion. Los cambios se aplican al momento.
 
 Ahora el dialecto acepta `Mostrar "Hola"` y ya no acepta `Escribir "Hola"`.

@@ -68,6 +68,10 @@ internal sealed class PseudoLanguageDefinition
         return new Regex(@"^\s*(" + string.Join("|", words) + @")\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 
+    public IReadOnlyList<CommandInfo> BuildQuickTemplates() => BuildDefaultSnippets(Keywords)
+        .Where(item => item.IsTemplate)
+        .ToArray();
+
     public static PseudoLanguageDefinition CreateDefault()
     {
         var keywords = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -159,7 +163,11 @@ internal sealed class PseudoLanguageDefinition
 
         var merged = customSnippets
             .Where(item => !string.IsNullOrWhiteSpace(item.Text) && !string.IsNullOrWhiteSpace(item.InsertText))
-            .Select(item => new CommandInfo(item.Text, item.InsertText, item.Description, item.IsTemplate))
+            .Select(item => new CommandInfo(
+                item.Text,
+                item.InsertText,
+                item.Description,
+                item.IsTemplate || item.InsertText.Contains('\n')))
             .ToList();
         var existing = merged.Select(item => item.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
