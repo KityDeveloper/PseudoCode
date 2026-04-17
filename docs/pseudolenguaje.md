@@ -323,7 +323,7 @@ El editor puede alinear el codigo automaticamente:
 - Enter conserva el indentado actual.
 - Despues de `Algoritmo`, `Si`, `Mientras`, `Para` y `Segun`, Enter agrega un nivel.
 - `Sino`, `De Otro Modo` y los casos de `Segun` continuan con un bloque indentado.
-- Puedes usar **Editar > Formatear documento** o `Ctrl+K, Ctrl+D`.
+- Puedes usar **Editar > Formatear documento** o `Ctrl+Shift+F`.
 
 Ejemplo sin formato:
 

@@ -75,7 +75,7 @@
             </MenuItem>
             <MenuItem Header="Editar">
               <MenuItem Header="Seleccionar todo" Click="SelectAll_Click" />
-              <MenuItem Header="Formatear documento (Ctrl+K, Ctrl+D)" Click="FormatDocument_Click" />
+              <MenuItem Header="Formatear documento (Ctrl+Sift+F)" Click="FormatDocument_Click" />
               <MenuItem Header="Limpiar salida" Click="ClearOutput_Click" />
             </MenuItem>
             <MenuItem Header="Ejecutar">

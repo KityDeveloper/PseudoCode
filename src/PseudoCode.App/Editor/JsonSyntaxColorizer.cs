@@ -21,11 +21,11 @@ internal sealed class JsonSyntaxColorizer : DocumentColorizingTransformer
 
     public JsonSyntaxColorizer(bool isLightTheme)
     {
-        _propertyBrush = Brush(isLightTheme ? "#0451A5" : "#9CDCFE");
-        _stringBrush = Brush(isLightTheme ? "#A31515" : "#CE9178");
-        _numberBrush = Brush(isLightTheme ? "#098658" : "#B5CEA8");
-        _keywordBrush = Brush(isLightTheme ? "#0000FF" : "#569CD6");
-        _punctuationBrush = Brush(isLightTheme ? "#24292F" : "#D4D4D4");
+        _propertyBrush = Brush(isLightTheme ? "#0451A5" : "#58A6FF");
+        _stringBrush = Brush(isLightTheme ? "#A31515" : "#FFAB70");
+        _numberBrush = Brush(isLightTheme ? "#098658" : "#7EE787");
+        _keywordBrush = Brush(isLightTheme ? "#6F42C1" : "#D2A8FF");
+        _punctuationBrush = Brush(isLightTheme ? "#24292F" : "#C9D1D9");
     }
 
     protected override void ColorizeLine(DocumentLine line)

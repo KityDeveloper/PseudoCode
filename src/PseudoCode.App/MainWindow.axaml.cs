@@ -598,8 +598,8 @@ public partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12
         });
-        visualThemeEditor.Children.Add(colorPicker);
         visualThemeEditor.Children.Add(BuildQuickColorPalette(color => SetThemeColor(selectedColorKey, color)));
+        visualThemeEditor.Children.Add(colorPicker);
 
         colorPicker.ColorChanged += (_, args) =>
         {
@@ -2347,7 +2347,7 @@ public partial class MainWindow : Window
     {
         var formatItem = new MenuItem
         {
-            Header = "Formatear documento (Ctrl+K, Ctrl+D)"
+            Header = "Formatear documento (Ctrl+Shift+F)"
         };
         formatItem.Click += FormatDocument_Click;
 
