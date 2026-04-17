@@ -1,5 +1,27 @@
 # Notas de version
 
+## 1.0.1 - 2026-04-17
+
+Version estable de mantenimiento enfocada en pulir configuracion, documentacion y experiencia visual.
+
+### Cambios principales
+
+- Mejoras al editor de temas de sintaxis con panel de color mas claro, colores rapidos y vista previa del codigo.
+- Vista previa de dialectos para ver como cambia el pseudocodigo al modificar palabras del lenguaje.
+- Mejor contraste del colorizador JSON en modo claro.
+- Subrayado de diagnostico visible dentro del preview de temas.
+- Documentacion de pseudolenguaje ampliada con ejemplos de sintaxis y bloques de codigo.
+- Links internos clickeables en la documentacion renderizada dentro de la app.
+- Animaciones del autor en la ventana Acerca de usando los sprites de Kity Dev.
+- Limpieza visual de la ventana Acerca de, sin boton inferior de cerrar.
+- Ajustes de layout en configuracion para paneles mas legibles y redimensionables donde corresponde.
+
+### Notas
+
+- Version estable, sin etiqueta beta ni alpha.
+- Autor: Kity Dev.
+- Algunos builds pueden no estar firmados todavia, por lo que Windows o macOS pueden mostrar una advertencia.
+
 ## 1.0.0 - 2026-04-17
 
 Primera version estable de PseudoCode.
