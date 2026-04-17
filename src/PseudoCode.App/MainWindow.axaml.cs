@@ -12,6 +12,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
@@ -21,6 +22,8 @@ namespace PseudoCode.App;
 
 public partial class MainWindow : Window
 {
+    private sealed record AboutAnimation(string Name, string[] Frames);
+
     private const double DefaultEditorFontSize = 15;
     private const double MinEditorFontSize = 10;
     private const double MaxEditorFontSize = 30;
@@ -1755,13 +1758,61 @@ public partial class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
+        var authorAnimations = BuildAuthorAnimations();
+        var authorAnimationIndex = 0;
+        var authorFrameIndex = 0;
+        var authorFrameCache = new Dictionary<string, Bitmap>(StringComparer.OrdinalIgnoreCase);
+        Bitmap LoadAuthorFrame(string frame)
+        {
+            if (authorFrameCache.TryGetValue(frame, out var bitmap))
+            {
+                return bitmap;
+            }
+
+            bitmap = new Bitmap(AssetLoader.Open(new Uri($"avares://PseudoCode.App/Assets/KityDev/{frame}")));
+            authorFrameCache[frame] = bitmap;
+            return bitmap;
+        }
+
         var authorLogo = new Image
         {
-            Source = new Bitmap(AssetLoader.Open(new Uri("avares://PseudoCode.App/Assets/iconKityDev.png"))),
-            Width = 170,
-            Height = 170,
+            Source = LoadAuthorFrame(authorAnimations[authorAnimationIndex].Frames[0]),
+            Width = 190,
+            Height = 190,
             Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        ToolTip.SetTip(authorLogo, "Click para cambiar animacion");
+
+        var authorAnimationLabel = new TextBlock
+        {
+            Text = $"Animacion: {authorAnimations[authorAnimationIndex].Name}",
+            Foreground = Brush("TextSecondary"),
+            FontSize = 12,
             HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        var authorTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(240)
+        };
+        authorTimer.Tick += (_, _) =>
+        {
+            var animation = authorAnimations[authorAnimationIndex];
+            authorFrameIndex = (authorFrameIndex + 1) % animation.Frames.Length;
+            authorLogo.Source = LoadAuthorFrame(animation.Frames[authorFrameIndex]);
+        };
+        authorTimer.Start();
+
+        authorLogo.PointerPressed += (_, args) =>
+        {
+            authorAnimationIndex = (authorAnimationIndex + 1) % authorAnimations.Length;
+            authorFrameIndex = 0;
+            var animation = authorAnimations[authorAnimationIndex];
+            authorLogo.Source = LoadAuthorFrame(animation.Frames[authorFrameIndex]);
+            authorAnimationLabel.Text = $"Animacion: {animation.Name}";
+            args.Handled = true;
         };
 
         var content = new StackPanel
@@ -1795,6 +1846,7 @@ public partial class MainWindow : Window
                     HorizontalAlignment = HorizontalAlignment.Center
                 },
                 authorLogo,
+                authorAnimationLabel,
                 new TextBlock
                 {
                     Text = AppInfoService.Author,
@@ -1819,6 +1871,14 @@ public partial class MainWindow : Window
         {
             closeButton.Click += (_, _) => window.Close();
         }
+        window.Closed += (_, _) =>
+        {
+            authorTimer.Stop();
+            foreach (var bitmap in authorFrameCache.Values)
+            {
+                bitmap.Dispose();
+            }
+        };
 
         window.Content = new ScrollViewer
         {
@@ -3379,6 +3439,64 @@ public partial class MainWindow : Window
     }
 
     private SolidColorBrush Brush(string key) => (SolidColorBrush)Resources[key]!;
+
+    private static AboutAnimation[] BuildAuthorAnimations() =>
+    [
+        new("Normal",
+        [
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal-closeEyes.png",
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal-OpenMouthpng.png",
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal.png",
+            "2-KityDev-Normal-OpenMouth_closeEyes.png",
+            "2-KityDev-Normal.png"
+        ]),
+        new("Happy",
+        [
+            "2-KityDev-Happy.png",
+            "2-KityDev-Happy.png",
+            "2-KityDev-Happy-CloseEyes.png",
+            "2-KityDev-Happy.png",
+            "2-KityDev-Happy.png",
+            "KityDev-openmouth.png",
+            "2-KityDev-Happy.png",
+            "2-KityDev-Happy-CloseEyes.png"
+        ]),
+        new("Thinking",
+        [
+            "2-KityDev-Thinking.png",
+            "2-KityDev-Thinking.png",
+            "2-KityDev-Thinking-closeEyes.png",
+            "2-KityDev-Thinking.png",
+            "2-KityDev-Thinking-OpenMouthpng.png",
+            "2-KityDev-Thinking.png",
+            "2-KityDev-Thinking-OpenMouth_closeEyes.png",
+            "2-KityDev-Thinking.png"
+        ]),
+        new("Classic",
+        [
+            "KityDev-cousemouth.png",
+            "KityDev-cousemouth.png",
+            "KityDev-closeEyesClosemouth.png",
+            "KityDev-cousemouthpng.png",
+            "KityDev-openmouth.png",
+            "KityDev-closeEyesOpenmouth.png",
+            "KityDev-cousemouth.png"
+        ]),
+        new("Celebration",
+        [
+            "KityDev-MaCaras-Celebration_OpenEyes-CloseMouth.png",
+            "KityDev-MaCaras-Celebration_OpenEyes-OpenMouth.png",
+            "KityDev-MaCaras-Celebration_OpenEyes-CloseMouth.png",
+            "KityDev-MaCaras-Celebration_CloseEyes-CloseMouth.png",
+            "KityDev-MaCaras-Celebration_OpenEyes-CloseMouth.png",
+            "KityDev-MaCaras-Celebration_CloseEyes-OpenMouth.png"
+        ])
+    ];
 
     private Grid BuildAboutLink(string label, string text, string uri)
     {

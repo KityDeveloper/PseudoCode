@@ -26,6 +26,7 @@
     <AvaloniaResource Include="../../resources/images/logoPseudoCode.png" Link="Assets/logoPseudoCode.png" />
     <AvaloniaResource Include="../../resources/images/iconKityDev.png" Link="Assets/iconKityDev.png" />
     <AvaloniaResource Include="../../resources/images/LogoKityDev.png" Link="Assets/LogoKityDev.png" />
+    <AvaloniaResource Include="../../resources/images/KityDev/*.png" Link="Assets/KityDev/%(Filename)%(Extension)" />
     <AvaloniaResource Include="../../docs/ayuda.md" Link="Docs/ayuda.md" />
     <AvaloniaResource Include="../../docs/pseudolenguaje.md" Link="Docs/pseudolenguaje.md" />
     <AvaloniaResource Include="../../docs/configuracion-json.md" Link="Docs/configuracion-json.md" />
