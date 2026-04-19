@@ -1,5 +1,18 @@
 # Notas de version
 
+## 1.1.3 - 2026-04-19
+
+Version estable enfocada en atajos de guardado, validacion de variables y cierre seguro de la app.
+
+### Cambios principales
+
+- `Ctrl + G` ahora guarda el documento activo desde la ventana o el editor.
+- El validador marca error cuando se usan variables sin declararlas antes con `Definir`.
+- El interprete tambien bloquea lecturas, asignaciones y expresiones con variables no declaradas.
+- Al cambiar nombres de variables o dejar errores en el codigo, la salida y tabla de variables anteriores se limpian para evitar datos viejos.
+- Al cerrar la app, se pregunta si quieres guardar, descartar o cancelar por cada archivo con cambios.
+- Version del proyecto actualizada a `1.1.3`.
+
 ## 1.1.2 - 2026-04-19
 
 Version estable enfocada en pulir el zoom del editor.
