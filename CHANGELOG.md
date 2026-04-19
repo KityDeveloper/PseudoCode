@@ -1,5 +1,17 @@
 # Notas de version
 
+## 1.1.2 - 2026-04-19
+
+Version estable enfocada en pulir el zoom del editor.
+
+### Cambios principales
+
+- `Ctrl + scroll` en el editor ahora se reserva para cambiar el tamano del texto y no mueve el scrollbar cuando llega al minimo o maximo.
+- El tamano del texto del editor se guarda en `editor.fontSize` y se conserva al reiniciar la app.
+- El zoom general de la interfaz con `Ctrl + +`, `Ctrl + -` y `Ctrl + 0` se guarda en `editor.interfaceScale`.
+- Detener una ejecucion manualmente ya no aparece como diagnostico; solo se informa en la barra de estado.
+- Version del proyecto actualizada a `1.1.2`.
+
 ## 1.1.1 - 2026-04-17
 
 Version estable de documentacion y presentacion del producto.

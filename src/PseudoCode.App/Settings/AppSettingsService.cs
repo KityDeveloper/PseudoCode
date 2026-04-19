@@ -7,6 +7,8 @@ internal sealed record RuntimeSettings(
     PseudoLanguageDefinition Language,
     SyntaxTheme DarkSyntaxTheme,
     SyntaxTheme LightSyntaxTheme,
+    double EditorFontSize,
+    double InterfaceScale,
     IReadOnlyList<string> Diagnostics,
     string UserSettingsPath);
 
@@ -16,6 +18,13 @@ internal sealed record JsonConfigApplyResult(string SavedPath, string Message);
 
 internal static class AppSettingsService
 {
+    private const double DefaultEditorFontSize = 15;
+    private const double MinEditorFontSize = 10;
+    private const double MaxEditorFontSize = 30;
+    private const double DefaultInterfaceScale = 1;
+    private const double MinInterfaceScale = 0.8;
+    private const double MaxInterfaceScale = 1.4;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -41,8 +50,10 @@ internal static class AppSettingsService
         var language = LoadDialect(settings.Language.ActiveDialect, baseSettingsPath, userSettingsPath, diagnostics);
         var dark = LoadSyntaxTheme(settings.Editor.SyntaxThemeDark, baseSettingsPath, userSettingsPath, SyntaxTheme.CreateDark(), diagnostics);
         var light = LoadSyntaxTheme(settings.Editor.SyntaxThemeLight, baseSettingsPath, userSettingsPath, SyntaxTheme.CreateLight(), diagnostics);
+        var editorFontSize = NormalizeEditorFontSize(settings.Editor.FontSize, diagnostics);
+        var interfaceScale = NormalizeInterfaceScale(settings.Editor.InterfaceScale, diagnostics);
 
-        return new RuntimeSettings(language, dark, light, diagnostics, userSettingsPath);
+        return new RuntimeSettings(language, dark, light, editorFontSize, interfaceScale, diagnostics, userSettingsPath);
     }
 
     public static IReadOnlyList<JsonConfigTarget> GetConfigTargets(RuntimeSettings settings) =>
@@ -132,6 +143,18 @@ internal static class AppSettingsService
         }
 
         return new JsonConfigApplyResult(saveTarget.FullPath, $"Guardado y aplicado: {saveTarget.RelativePath}.");
+    }
+
+    public static void SaveEditorFontSize(string userSettingsPath, double fontSize)
+    {
+        var normalized = NormalizeEditorFontSize(fontSize);
+        UpdateUserSettings(userSettingsPath, appSettings => appSettings.Editor.FontSize = normalized);
+    }
+
+    public static void SaveInterfaceScale(string userSettingsPath, double scale)
+    {
+        var normalized = NormalizeInterfaceScale(scale);
+        UpdateUserSettings(userSettingsPath, appSettings => appSettings.Editor.InterfaceScale = normalized);
     }
 
     public static bool TryReadJsonId(string json, out string id, out string error)
@@ -307,6 +330,40 @@ internal static class AppSettingsService
         }
     }
 
+    private static double NormalizeEditorFontSize(double fontSize, List<string>? diagnostics = null)
+    {
+        if (double.IsNaN(fontSize) || double.IsInfinity(fontSize))
+        {
+            diagnostics?.Add($"Settings: editor.fontSize no es valido. Se uso {DefaultEditorFontSize:0}px.");
+            return DefaultEditorFontSize;
+        }
+
+        var normalized = Math.Clamp(fontSize, MinEditorFontSize, MaxEditorFontSize);
+        if (Math.Abs(normalized - fontSize) > 0.001)
+        {
+            diagnostics?.Add($"Settings: editor.fontSize debe estar entre {MinEditorFontSize:0} y {MaxEditorFontSize:0}. Se uso {normalized:0}px.");
+        }
+
+        return normalized;
+    }
+
+    private static double NormalizeInterfaceScale(double scale, List<string>? diagnostics = null)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale))
+        {
+            diagnostics?.Add($"Settings: editor.interfaceScale no es valido. Se uso {DefaultInterfaceScale:0.##}.");
+            return DefaultInterfaceScale;
+        }
+
+        var normalized = Math.Clamp(scale, MinInterfaceScale, MaxInterfaceScale);
+        if (Math.Abs(normalized - scale) > 0.001)
+        {
+            diagnostics?.Add($"Settings: editor.interfaceScale debe estar entre {MinInterfaceScale:0.##} y {MaxInterfaceScale:0.##}. Se uso {normalized:0.##}.");
+        }
+
+        return normalized;
+    }
+
     private static string GetUserSettingsPath()
     {
         if (OperatingSystem.IsWindows())
@@ -331,6 +388,8 @@ internal static class AppSettingsService
         "activeDialect": "custom"
       },
       "editor": {
+        "fontSize": 15,
+        "interfaceScale": 1,
         "syntaxThemeDark": "custom-dark",
         "syntaxThemeLight": "light"
       }
@@ -667,6 +726,12 @@ internal sealed class LanguageSettingsDto
 
 internal sealed class EditorSettingsDto
 {
+    [JsonPropertyName("fontSize")]
+    public double FontSize { get; set; } = 15;
+
+    [JsonPropertyName("interfaceScale")]
+    public double InterfaceScale { get; set; } = 1;
+
     [JsonPropertyName("syntaxThemeDark")]
     public string SyntaxThemeDark { get; set; } = SyntaxTheme.DefaultDarkId;
 

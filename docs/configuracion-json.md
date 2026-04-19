@@ -40,13 +40,15 @@ macOS: ~/Library/Application Support/PseudoCode/settings/
     "activeDialect": "pseint"
   },
   "editor": {
+    "fontSize": 15,
+    "interfaceScale": 1,
     "syntaxThemeDark": "dark",
     "syntaxThemeLight": "light"
   }
 }
 ```
 
-El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`.
+El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`. `fontSize` guarda el tamano del texto del editor y `interfaceScale` guarda el zoom general de la interfaz; ambos se mantienen entre reinicios.
 
 En la app puedes abrir el menu **Configuracion** para editar estos archivos sin salir de PseudoCode:
 
@@ -207,6 +209,8 @@ La app actualiza automaticamente el settings de usuario para seleccionar el dial
     "activeDialect": "custom"
   },
   "editor": {
+    "fontSize": 15,
+    "interfaceScale": 1,
     "syntaxThemeDark": "dark",
     "syntaxThemeLight": "light"
   }

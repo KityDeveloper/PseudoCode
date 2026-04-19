@@ -6,4 +6,5 @@ public sealed record ExecutionResult(
     IReadOnlyList<string> Diagnostics,
     IReadOnlyDictionary<string, object?> Variables,
     bool WaitingForInput = false,
-    string? InputVariable = null);
+    string? InputVariable = null,
+    bool StoppedByUser = false);

@@ -3,6 +3,8 @@
     "activeDialect": "pseint"
   },
   "editor": {
+    "fontSize": 15,
+    "interfaceScale": 1,
     "syntaxThemeDark": "dark",
     "syntaxThemeLight": "light"
   }

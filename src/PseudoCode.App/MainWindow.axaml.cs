@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         _helpTopics = BuildDefaultHelpTopics(_language);
         _recentDocuments = RecentDocumentsService.Load(_runtimeSettings.UserSettingsPath);
         InitializeComponent();
+        SetInterfaceScale(_runtimeSettings.InterfaceScale, persist: false, updateStatus: false);
         ConfigureEditor();
         BuildEditorTools();
         BuildHelpTopics();
@@ -956,7 +957,9 @@ public partial class MainWindow : Window
             {
                 visualTextEditor.Children.Add(BuildVisualSection("Lenguaje", "Selecciona el dialecto activo que usara editor, ayuda, validacion y ejecucion."));
                 visualTextEditor.Children.Add(BuildVisualTextField("Dialect active", "language.activeDialect", GetJsonString(root, "language", "activeDialect"), value => SetJsonString(["language", "activeDialect"], value)));
-                visualTextEditor.Children.Add(BuildVisualSection("Editor", "Selecciona los temas de sintaxis por modo de interfaz."));
+                visualTextEditor.Children.Add(BuildVisualSection("Editor", "Ajusta el tamano del texto y los temas de sintaxis por modo de interfaz."));
+                visualTextEditor.Children.Add(BuildVisualTextField("Font size", "editor.fontSize", GetJsonNumber(root, DefaultEditorFontSize, "editor", "fontSize"), value => SetJsonNumber(["editor", "fontSize"], value, MinEditorFontSize, MaxEditorFontSize)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Interface scale", "editor.interfaceScale", GetJsonNumber(root, DefaultInterfaceScale, "editor", "interfaceScale"), value => SetJsonNumber(["editor", "interfaceScale"], value, MinInterfaceScale, MaxInterfaceScale)));
                 visualTextEditor.Children.Add(BuildVisualTextField("Dark syntax theme", "editor.syntaxThemeDark", GetJsonString(root, "editor", "syntaxThemeDark"), value => SetJsonString(["editor", "syntaxThemeDark"], value)));
                 visualTextEditor.Children.Add(BuildVisualTextField("Light syntax theme", "editor.syntaxThemeLight", GetJsonString(root, "editor", "syntaxThemeLight"), value => SetJsonString(["editor", "syntaxThemeLight"], value)));
                 return;
@@ -1016,6 +1019,27 @@ public partial class MainWindow : Window
             {
                 var items = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 var updated = TrySetJsonStringArray(editor.Text ?? string.Empty, path, items);
+                if (updated is null)
+                {
+                    status.Text = $"No pude actualizar {string.Join('.', path)}.";
+                    return;
+                }
+
+                isSyncingVisualEditor = true;
+                editor.Text = updated;
+                isSyncingVisualEditor = false;
+                UpdateCodePreview();
+            }
+
+            void SetJsonNumber(string[] path, string value, double min, double max)
+            {
+                if (!double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var number))
+                {
+                    status.Text = $"{string.Join('.', path)} debe ser un numero.";
+                    return;
+                }
+
+                var updated = TrySetJsonNumber(editor.Text ?? string.Empty, path, Math.Clamp(number, min, max));
                 if (updated is null)
                 {
                     status.Text = $"No pude actualizar {string.Join('.', path)}.";
@@ -1680,6 +1704,19 @@ public partial class MainWindow : Window
         return node?.GetValue<string>() ?? string.Empty;
     }
 
+    private static string GetJsonNumber(JsonObject root, double fallback, params string[] path)
+    {
+        JsonNode? node = root;
+        foreach (var segment in path)
+        {
+            node = node?[segment];
+        }
+
+        return node is JsonValue value && value.TryGetValue<double>(out var number)
+            ? number.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+            : fallback.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private static IEnumerable<string> GetJsonStringArray(JsonObject root, params string[] path)
     {
         JsonNode? node = root;
@@ -1714,6 +1751,18 @@ public partial class MainWindow : Window
 
         var parent = EnsureJsonParent(root, path);
         parent[path[^1]] = new JsonArray(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
+        return root.ToJsonString(JsonWriteOptions) + Environment.NewLine;
+    }
+
+    private static string? TrySetJsonNumber(string json, IReadOnlyList<string> path, double value)
+    {
+        if (!TryParseJsonObject(json, out var root) || path.Count == 0)
+        {
+            return null;
+        }
+
+        var parent = EnsureJsonParent(root, path);
+        parent[path[^1]] = value;
         return root.ToJsonString(JsonWriteOptions) + Environment.NewLine;
     }
 
@@ -2450,7 +2499,14 @@ public partial class MainWindow : Window
         else
         {
             HideConsoleInput();
-            UpdateWindowState(result.Success ? "Ejecucion completada" : "Ejecucion con diagnosticos");
+            if (result.StoppedByUser)
+            {
+                UpdateWindowState("Ejecucion detenida");
+            }
+            else
+            {
+                UpdateWindowState(result.Success ? "Ejecucion completada" : "Ejecucion con diagnosticos");
+            }
         }
     }
 
@@ -2569,12 +2625,17 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
         _debugLineRenderer = new DebugLineRenderer(BuildDebugLineBrush(palette));
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_debugLineRenderer);
+        SetEditorFontSize(_runtimeSettings.EditorFontSize, persist: false, updateStatus: false);
         ApplyEditorTheme(DarkTheme, palette);
         ConfigureEditorContextMenu();
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
-        EditorTextBox.PointerWheelChanged += Editor_PointerWheelChanged;
+        EditorTextBox.AddHandler(
+            InputElement.PointerWheelChangedEvent,
+            Editor_PointerWheelChanged,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
     }
 
     private void ConfigureEditorContextMenu()
@@ -2650,6 +2711,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        e.Handled = true;
+
         if (e.Delta.Y > 0)
         {
             ZoomEditor(1);
@@ -2658,8 +2721,6 @@ public partial class MainWindow : Window
         {
             ZoomEditor(-1);
         }
-
-        e.Handled = true;
     }
 
     private void ZoomInterface(int direction)
@@ -2667,11 +2728,21 @@ public partial class MainWindow : Window
         SetInterfaceScale(_interfaceScale + direction * InterfaceScaleStep);
     }
 
-    private void SetInterfaceScale(double scale)
+    private void SetInterfaceScale(double scale, bool persist = true, bool updateStatus = true)
     {
-        _interfaceScale = Math.Clamp(scale, MinInterfaceScale, MaxInterfaceScale);
+        var nextScale = Math.Clamp(scale, MinInterfaceScale, MaxInterfaceScale);
+        var changed = Math.Abs(_interfaceScale - nextScale) > 0.001;
+        _interfaceScale = nextScale;
         AppScaleHost.LayoutTransform = new ScaleTransform(_interfaceScale, _interfaceScale);
-        UpdateWindowState($"Zoom interfaz: {_interfaceScale:P0}");
+        if (persist && changed)
+        {
+            AppSettingsService.SaveInterfaceScale(_runtimeSettings.UserSettingsPath, nextScale);
+        }
+
+        if (updateStatus)
+        {
+            UpdateWindowState($"Zoom interfaz: {_interfaceScale:P0}");
+        }
     }
 
     private static bool IsIncreaseKey(KeyEventArgs e)
@@ -2763,11 +2834,21 @@ public partial class MainWindow : Window
         SetEditorFontSize(EditorTextBox.FontSize + direction * EditorZoomStep);
     }
 
-    private void SetEditorFontSize(double fontSize)
+    private void SetEditorFontSize(double fontSize, bool persist = true, bool updateStatus = true)
     {
-        EditorTextBox.FontSize = Math.Clamp(fontSize, MinEditorFontSize, MaxEditorFontSize);
+        var nextFontSize = Math.Clamp(fontSize, MinEditorFontSize, MaxEditorFontSize);
+        var changed = Math.Abs(EditorTextBox.FontSize - nextFontSize) > 0.001;
+        EditorTextBox.FontSize = nextFontSize;
         EditorTextBox.TextArea.TextView.Redraw();
-        UpdateWindowState($"Zoom editor: {EditorTextBox.FontSize:0}px");
+        if (persist && changed)
+        {
+            AppSettingsService.SaveEditorFontSize(_runtimeSettings.UserSettingsPath, nextFontSize);
+        }
+
+        if (updateStatus)
+        {
+            UpdateWindowState($"Zoom editor: {EditorTextBox.FontSize:0}px");
+        }
     }
 
     private void ShowCompletion(bool force = false)

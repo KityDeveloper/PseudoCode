@@ -15,5 +15,5 @@ internal static class AppInfoService
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion
         ?? typeof(AppInfoService).Assembly.GetName().Version?.ToString()
-        ?? "1.1.1";
+        ?? "1.1.2";
 }

@@ -24,6 +24,7 @@ internal sealed class AdvancedPseudoInterpreter
     private bool _outputLineOpen;
     private int _executionSteps;
     private bool _halted;
+    private bool _stoppedByUser;
     private bool _outputLimitReported;
     private CancellationToken _cancellationToken;
     private ManualResetEventSlim? _pauseGate;
@@ -126,6 +127,7 @@ internal sealed class AdvancedPseudoInterpreter
         _outputLineOpen = false;
         _executionSteps = 0;
         _halted = false;
+        _stoppedByUser = false;
         _outputLimitReported = false;
         _inputIndex = 0;
         _cancellationToken = default;
@@ -636,7 +638,7 @@ internal sealed class AdvancedPseudoInterpreter
         }
 
         _halted = true;
-        AddRuntime(line, "ejecucion detenida", "el usuario presiono detener", "vuelve a ejecutar cuando quieras continuar desde el inicio");
+        _stoppedByUser = true;
     }
 
     private void AddOutput(string text)
@@ -758,12 +760,13 @@ internal sealed class AdvancedPseudoInterpreter
         });
 
     private ExecutionResult BuildResult() => new(
-        _diagnostics.Count == 0 && _waitingInputVariable is null,
+        _diagnostics.Count == 0 && _waitingInputVariable is null && !_stoppedByUser,
         _output.ToArray(),
         _diagnostics.ToArray(),
         new Dictionary<string, object?>(_variables),
         _waitingInputVariable is not null,
-        _waitingInputVariable);
+        _waitingInputVariable,
+        _stoppedByUser);
 
     private void AddRuntime(int line, string problem, string cause, string solution) =>
         _diagnostics.Add($"Linea {line}: {problem}. Causa: {cause}. Solucion: {solution}.");
