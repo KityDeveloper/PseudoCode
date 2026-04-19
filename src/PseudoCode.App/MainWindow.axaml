@@ -87,7 +87,7 @@
               <MenuItem Header="Abrir..." Click="OpenFile_Click" />
               <MenuItem x:Name="RecentFilesMenu" Header="Documentos recientes" />
               <Separator />
-              <MenuItem Header="Guardar" Click="SaveFile_Click" />
+              <MenuItem Header="Guardar (Ctrl+G)" Click="SaveFile_Click" />
               <MenuItem Header="Cerrar archivo" Click="CloseFile_Click" />
             </MenuItem>
             <MenuItem Header="Editar">
@@ -137,7 +137,7 @@
         <StackPanel Grid.Row="1" Margin="14,0,14,12" Spacing="8">
           <Button Classes="command" Click="NewFile_Click" Content="Nuevo algoritmo" HorizontalAlignment="Stretch" />
           <Button Classes="command" Click="OpenFile_Click" Content="Abrir..." HorizontalAlignment="Stretch" />
-          <Button Classes="command" Click="SaveFile_Click" Content="Guardar" HorizontalAlignment="Stretch" />
+          <Button Classes="command" Click="SaveFile_Click" Content="Guardar" ToolTip.Tip="Guardar (Ctrl+G)" HorizontalAlignment="Stretch" />
         </StackPanel>
 
         <Border Grid.Row="2" Margin="14,0,14,12" Background="{StaticResource InsetBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="1" CornerRadius="4">
@@ -218,7 +218,7 @@
             <Button x:Name="StopExecutionButton" Classes="command stop-command" Click="StopExecution_Click" Content="■ Stop" ToolTip.Tip="Detener la ejecución actual" IsEnabled="False" />
             <Button Classes="command" Click="StartDebug_Click" Content="Depurar" ToolTip.Tip="Iniciar depuración paso a paso" />
             <Button Classes="command" Click="StepDebug_Click" Content="F10 Paso" ToolTip.Tip="Ejecutar la línea actual y avanzar" />
-            <Button Classes="command" Click="SaveFile_Click" Content="Guardar" />
+            <Button Classes="command" Click="SaveFile_Click" Content="Guardar" ToolTip.Tip="Guardar (Ctrl+G)" />
           </StackPanel>
         </Border>
       </Grid>

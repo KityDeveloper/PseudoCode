@@ -345,7 +345,7 @@ public partial class MainWindow : Window
         UpdateOutputPanelView();
     }
 
-    private void Window_KeyDown(object? sender, KeyEventArgs e)
+    private async void Window_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.F10)
         {
@@ -356,6 +356,13 @@ public partial class MainWindow : Window
 
         if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
+            return;
+        }
+
+        if (IsSaveShortcut(e))
+        {
+            e.Handled = true;
+            await SaveCurrentFileAsync();
             return;
         }
 
@@ -2676,8 +2683,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Editor_KeyDown(object? sender, KeyEventArgs e)
+    private async void Editor_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (IsSaveShortcut(e))
+        {
+            e.Handled = true;
+            await SaveCurrentFileAsync();
+            return;
+        }
+
         if (TryHandleFormatShortcut(e))
         {
             return;
@@ -2764,6 +2778,13 @@ public partial class MainWindow : Window
         var key = e.Key.ToString();
         var keySymbol = e.KeySymbol ?? string.Empty;
         return key is "D0" or "NumPad0" || keySymbol is "0";
+    }
+
+    private static bool IsSaveShortcut(KeyEventArgs e)
+    {
+        return e.Key == Key.G
+            && e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            && !e.KeyModifiers.HasFlag(KeyModifiers.Alt);
     }
 
     private bool TryHandleFormatShortcut(KeyEventArgs e)
