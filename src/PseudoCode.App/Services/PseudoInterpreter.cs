@@ -9,6 +9,7 @@ public sealed class PseudoInterpreter
 {
     private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _declaredVariables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
     private readonly List<string> _diagnostics = [];
     private string[] _lines = [];
@@ -19,6 +20,7 @@ public sealed class PseudoInterpreter
     public ExecutionResult Start(string source)
     {
         _variables.Clear();
+        _declaredVariables.Clear();
         _output.Clear();
         _diagnostics.Clear();
         _pendingInputVariables.Clear();
@@ -128,6 +130,7 @@ public sealed class PseudoInterpreter
                 continue;
             }
 
+            _declaredVariables.Add(rawName);
             _variables.TryAdd(rawName, 0d);
         }
     }
@@ -137,6 +140,11 @@ public sealed class PseudoInterpreter
         if (!Identifier.IsMatch(name))
         {
             _diagnostics.Add($"Linea {lineNumber}: '{name}' no es un nombre de variable valido.");
+            return;
+        }
+
+        if (!EnsureDeclared(name, lineNumber))
+        {
             return;
         }
 
@@ -163,6 +171,11 @@ public sealed class PseudoInterpreter
             if (!Identifier.IsMatch(name))
             {
                 _diagnostics.Add($"Linea {lineNumber}: '{name}' no es un nombre de variable valido.");
+                continue;
+            }
+
+            if (!EnsureDeclared(name, lineNumber))
+            {
                 continue;
             }
 
@@ -235,6 +248,11 @@ public sealed class PseudoInterpreter
             return variableValue;
         }
 
+        if (Identifier.IsMatch(expression) && !EnsureDeclared(expression, lineNumber))
+        {
+            return string.Empty;
+        }
+
         var evaluableExpression = ReplaceVariables(expression, lineNumber);
         try
         {
@@ -254,7 +272,7 @@ public sealed class PseudoInterpreter
         {
             if (!_variables.TryGetValue(match.Value, out var value))
             {
-                _diagnostics.Add($"Linea {lineNumber}: la variable '{match.Value}' no tiene valor.");
+                EnsureDeclared(match.Value, lineNumber);
                 return "0";
             }
 
@@ -262,6 +280,17 @@ public sealed class PseudoInterpreter
                 ? formattable.ToString(null, CultureInfo.InvariantCulture) ?? "0"
                 : "0";
         });
+    }
+
+    private bool EnsureDeclared(string name, int lineNumber)
+    {
+        if (_declaredVariables.Contains(name))
+        {
+            return true;
+        }
+
+        _diagnostics.Add($"Linea {lineNumber}: la variable '{name}' no esta declarada. Causa: se usa antes de Definir. Solucion: agrega 'Definir {name} Como Real' antes de usarla.");
+        return false;
     }
 
     private static string RemoveComment(string line)

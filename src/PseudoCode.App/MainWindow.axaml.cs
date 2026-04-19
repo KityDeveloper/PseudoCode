@@ -164,6 +164,7 @@ public partial class MainWindow : Window
         document.Text = EditorTextBox.Text ?? string.Empty;
         if (UpdateLiveSyntaxDiagnostics(document))
         {
+            ClearExecutionViewForValidationFailure(document);
             _showDiagnostics = true;
             UpdateDiagnosticUnderlines();
             UpdateOutputPanelView();
@@ -259,6 +260,16 @@ public partial class MainWindow : Window
         HighlightDebugLine(null);
         UpdateDiagnosticUnderlines();
         UpdateOutputPanelView();
+    }
+
+    private void ClearExecutionViewForValidationFailure(OpenDocument document)
+    {
+        document.LastExecutionResult = null;
+        document.OutputText = string.Empty;
+        document.VariablesText = string.Empty;
+        VariablesTextBox.Text = string.Empty;
+        HideConsoleInput();
+        HighlightDebugLine(null);
     }
 
     private void PauseExecution_Click(object? sender, RoutedEventArgs e)
@@ -2529,6 +2540,7 @@ public partial class MainWindow : Window
         document.Text = EditorTextBox.Text ?? string.Empty;
         if (UpdateLiveSyntaxDiagnostics(document))
         {
+            ClearExecutionViewForValidationFailure(document);
             _showDiagnostics = true;
             UpdateDiagnosticUnderlines();
             UpdateOutputPanelView();

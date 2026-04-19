@@ -14,6 +14,7 @@ internal sealed class AdvancedPseudoInterpreter
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(50);
     private readonly PseudoLanguageDefinition _language;
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _declaredVariables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
     private readonly List<string> _diagnostics = [];
     private readonly List<string> _inputs = [];
@@ -121,6 +122,7 @@ internal sealed class AdvancedPseudoInterpreter
     private void ResetExecutionState()
     {
         _variables.Clear();
+        _declaredVariables.Clear();
         _output.Clear();
         _diagnostics.Clear();
         _waitingInputVariable = null;
@@ -353,12 +355,17 @@ internal sealed class AdvancedPseudoInterpreter
             case Declare declare:
                 foreach (var name in declare.Names)
                 {
-                    if (Identifier.IsMatch(name)) _variables.TryAdd(name, 0d);
+                    if (Identifier.IsMatch(name))
+                    {
+                        _declaredVariables.Add(name);
+                        _variables.TryAdd(name, 0d);
+                    }
                     else AddRuntime(node.Line, $"'{name}' no es un nombre valido", "usa caracteres no permitidos", "usa letras, numeros y guion bajo");
                 }
                 return;
             case Assign assign:
                 if (!Identifier.IsMatch(assign.Name)) AddRuntime(node.Line, $"'{assign.Name}' no es un destino valido", "el lado izquierdo debe ser variable", "usa 'total <- 10'");
+                else if (!EnsureDeclared(assign.Name, node.Line)) return;
                 else _variables[assign.Name] = EvaluateValue(assign.Expression, node.Line);
                 return;
             case Write write:
@@ -367,6 +374,7 @@ internal sealed class AdvancedPseudoInterpreter
             case Read read:
                 foreach (var name in read.Names)
                 {
+                    if (!EnsureDeclared(name, node.Line)) return;
                     AddOutput($"? {name}:");
                     _outputLineOpen = false;
                     if (_inputIndex >= _inputs.Count)
@@ -406,6 +414,7 @@ internal sealed class AdvancedPseudoInterpreter
                 }
                 return;
             case For loop:
+                if (!EnsureDeclared(loop.Variable, node.Line)) return;
                 var start = ToNumber(EvaluateValue(loop.Start, node.Line));
                 var end = ToNumber(EvaluateValue(loop.End, node.Line));
                 for (var value = start; value <= end; value++)
@@ -468,6 +477,10 @@ internal sealed class AdvancedPseudoInterpreter
                 break;
             case For loop:
                 frame.Advance();
+                if (!EnsureDeclared(loop.Variable, node.Line))
+                {
+                    break;
+                }
                 var start = ToNumber(EvaluateValue(loop.Start, node.Line));
                 var end = ToNumber(EvaluateValue(loop.End, node.Line));
                 if (start <= end)
@@ -684,6 +697,7 @@ internal sealed class AdvancedPseudoInterpreter
         if (_language.IsKeyword(expression, "true")) return true;
         if (_language.IsKeyword(expression, "false")) return false;
         if (_variables.TryGetValue(expression, out var variable)) return variable;
+        if (Identifier.IsMatch(expression) && !EnsureDeclared(expression, line)) return string.Empty;
         try
         {
             return Convert.ToDouble(new DataTable().Compute(ReplaceVariables(expression, line), null), CultureInfo.InvariantCulture);
@@ -753,11 +767,23 @@ internal sealed class AdvancedPseudoInterpreter
             if (_language.IsKeyword(match.Value, "false")) return "false";
             if (!_variables.TryGetValue(match.Value, out var value))
             {
-                AddRuntime(line, $"la variable '{match.Value}' no tiene valor", "no fue definida/asignada antes de usarse", "declara o asigna la variable primero");
+                EnsureDeclared(match.Value, line);
                 return "0";
             }
             return value is bool boolean ? (boolean ? "true" : "false") : Convert.ToString(value, CultureInfo.InvariantCulture) ?? "0";
         });
+
+    private bool EnsureDeclared(string name, int line)
+    {
+        if (_declaredVariables.Contains(name))
+        {
+            return true;
+        }
+
+        _halted = true;
+        AddRuntime(line, $"la variable '{name}' no esta declarada", $"se usa antes de {_language.Keyword("declare")}", $"agrega '{_language.Keyword("declare")} {name} {_language.Keyword("typeSeparator")} Real' antes de usarla");
+        return false;
+    }
 
     private ExecutionResult BuildResult() => new(
         _diagnostics.Count == 0 && _waitingInputVariable is null && !_stoppedByUser,

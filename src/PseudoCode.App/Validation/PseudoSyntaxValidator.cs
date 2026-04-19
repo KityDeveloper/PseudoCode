@@ -16,6 +16,7 @@ internal sealed class PseudoSyntaxValidator
     {
         var diagnostics = new List<string>();
         var blocks = new Stack<(string Name, string CloseRole, int Line)>();
+        var declaredVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lines = source.Replace("\r\n", "\n").Split('\n');
 
         for (var index = 0; index < lines.Length; index++)
@@ -27,7 +28,7 @@ internal sealed class PseudoSyntaxValidator
                 continue;
             }
 
-            ValidateLine(line, lineNumber, diagnostics, blocks);
+            ValidateLine(line, lineNumber, diagnostics, blocks, declaredVariables);
         }
 
         while (blocks.TryPop(out var block))
@@ -38,7 +39,12 @@ internal sealed class PseudoSyntaxValidator
         return diagnostics;
     }
 
-    private void ValidateLine(string line, int lineNumber, List<string> diagnostics, Stack<(string Name, string CloseRole, int Line)> blocks)
+    private void ValidateLine(
+        string line,
+        int lineNumber,
+        List<string> diagnostics,
+        Stack<(string Name, string CloseRole, int Line)> blocks,
+        HashSet<string> declaredVariables)
     {
         if (line.Count(character => character == '"') % 2 != 0)
         {
@@ -70,7 +76,7 @@ internal sealed class PseudoSyntaxValidator
 
         if (_language.StartsWithKeyword(line, "declare"))
         {
-            ValidateDeclaration(_language.RemoveKeywordPrefix(line, "declare"), lineNumber, diagnostics);
+            ValidateDeclaration(_language.RemoveKeywordPrefix(line, "declare"), lineNumber, diagnostics, declaredVariables);
             return;
         }
 
@@ -79,12 +85,13 @@ internal sealed class PseudoSyntaxValidator
             var payload = _language.RemoveKeywordPrefix(line, "write");
             _ = TryRemoveTrailingKeyword(ref payload, _language.Keyword("withoutNewline"));
             ValidateExpression(payload, lineNumber, _language.Keyword("write"), diagnostics);
+            ValidateExpressionVariables(payload, lineNumber, diagnostics, declaredVariables);
             return;
         }
 
         if (_language.StartsWithKeyword(line, "read"))
         {
-            ValidateIdentifierList(_language.RemoveKeywordPrefix(line, "read"), lineNumber, _language.Keyword("read"), diagnostics);
+            ValidateIdentifierList(_language.RemoveKeywordPrefix(line, "read"), lineNumber, _language.Keyword("read"), diagnostics, declaredVariables, requireDeclared: true);
             return;
         }
 
@@ -95,12 +102,14 @@ internal sealed class PseudoSyntaxValidator
 
         if (_language.StartsWithKeyword(line, "wait"))
         {
-            ValidateWait(_language.RemoveKeywordPrefix(line, "wait"), lineNumber, diagnostics);
+            ValidateWait(_language.RemoveKeywordPrefix(line, "wait"), lineNumber, diagnostics, declaredVariables);
             return;
         }
 
-        if (Regex.IsMatch(line, $@"^{_language.RegexKeyword("if")}\s+.+\s+{_language.RegexKeyword("then")}$", RegexOptions.IgnoreCase))
+        var ifMatch = Regex.Match(line, $@"^{_language.RegexKeyword("if")}\s+(.+)\s+{_language.RegexKeyword("then")}$", RegexOptions.IgnoreCase);
+        if (ifMatch.Success)
         {
+            ValidateExpressionVariables(ifMatch.Groups[1].Value, lineNumber, diagnostics, declaredVariables);
             blocks.Push((_language.Keyword("if"), "endIf", lineNumber));
             return;
         }
@@ -120,8 +129,10 @@ internal sealed class PseudoSyntaxValidator
             return;
         }
 
-        if (Regex.IsMatch(line, $@"^{_language.RegexKeyword("while")}\s+.+\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase))
+        var whileMatch = Regex.Match(line, $@"^{_language.RegexKeyword("while")}\s+(.+)\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase);
+        if (whileMatch.Success)
         {
+            ValidateExpressionVariables(whileMatch.Groups[1].Value, lineNumber, diagnostics, declaredVariables);
             blocks.Push((_language.Keyword("while"), "endWhile", lineNumber));
             return;
         }
@@ -132,8 +143,12 @@ internal sealed class PseudoSyntaxValidator
             return;
         }
 
-        if (Regex.IsMatch(line, $@"^{_language.RegexKeyword("for")}\s+[A-Za-z_][A-Za-z0-9_]*\s*<-\s*.+\s+{_language.RegexKeyword("until")}\s+.+\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase))
+        var forMatch = Regex.Match(line, $@"^{_language.RegexKeyword("for")}\s+([A-Za-z_][A-Za-z0-9_]*)\s*<-\s*(.+)\s+{_language.RegexKeyword("until")}\s+(.+)\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase);
+        if (forMatch.Success)
         {
+            ValidateDeclaredVariable(forMatch.Groups[1].Value, lineNumber, diagnostics, declaredVariables);
+            ValidateExpressionVariables(forMatch.Groups[2].Value, lineNumber, diagnostics, declaredVariables);
+            ValidateExpressionVariables(forMatch.Groups[3].Value, lineNumber, diagnostics, declaredVariables);
             blocks.Push((_language.Keyword("for"), "endFor", lineNumber));
             return;
         }
@@ -144,8 +159,10 @@ internal sealed class PseudoSyntaxValidator
             return;
         }
 
-        if (Regex.IsMatch(line, $@"^{_language.RegexKeyword("switch")}\s+.+\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase))
+        var switchMatch = Regex.Match(line, $@"^{_language.RegexKeyword("switch")}\s+(.+)\s+{_language.RegexKeyword("do")}$", RegexOptions.IgnoreCase);
+        if (switchMatch.Success)
         {
+            ValidateExpressionVariables(switchMatch.Groups[1].Value, lineNumber, diagnostics, declaredVariables);
             blocks.Push((_language.Keyword("switch"), "endSwitch", lineNumber));
             return;
         }
@@ -158,24 +175,29 @@ internal sealed class PseudoSyntaxValidator
 
         if (Regex.IsMatch(line, @"^.+:\s*$"))
         {
+            var label = line.TrimEnd(':').Trim();
+            if (!_language.IsKeyword(label, "otherwise"))
+            {
+                ValidateExpressionVariables(label, lineNumber, diagnostics, declaredVariables);
+            }
             return;
         }
 
         var assignmentIndex = line.IndexOf("<-", StringComparison.Ordinal);
         if (assignmentIndex > 0)
         {
-            ValidateAssignment(line, assignmentIndex, lineNumber, diagnostics);
+            ValidateAssignment(line, assignmentIndex, lineNumber, diagnostics, declaredVariables);
             return;
         }
 
         diagnostics.Add($"Linea {lineNumber}: instruccion desconocida. Causa: '{line}' no coincide con el dialecto '{_language.DisplayName}'. Solucion: revisa la palabra clave o consulta la ayuda.");
     }
 
-    private void ValidateDeclaration(string declaration, int lineNumber, List<string> diagnostics)
+    private void ValidateDeclaration(string declaration, int lineNumber, List<string> diagnostics, HashSet<string> declaredVariables)
     {
         var separator = declaration.IndexOf($" {_language.Keyword("typeSeparator")} ", StringComparison.OrdinalIgnoreCase);
         var names = separator >= 0 ? declaration[..separator] : declaration;
-        ValidateIdentifierList(names, lineNumber, _language.Keyword("declare"), diagnostics);
+        ValidateIdentifierList(names, lineNumber, _language.Keyword("declare"), diagnostics, declaredVariables);
 
         if (separator >= 0)
         {
@@ -187,7 +209,13 @@ internal sealed class PseudoSyntaxValidator
         }
     }
 
-    private static void ValidateIdentifierList(string text, int lineNumber, string instruction, List<string> diagnostics)
+    private void ValidateIdentifierList(
+        string text,
+        int lineNumber,
+        string instruction,
+        List<string> diagnostics,
+        HashSet<string> declaredVariables,
+        bool requireDeclared = false)
     {
         var names = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (names.Length == 0)
@@ -201,6 +229,16 @@ internal sealed class PseudoSyntaxValidator
             if (!Identifier.IsMatch(name))
             {
                 diagnostics.Add($"Linea {lineNumber}: '{name}' no es un nombre de variable valido. Causa: usa caracteres no permitidos o inicia con numero. Solucion: usa letras, numeros y guion bajo, empezando con letra.");
+                continue;
+            }
+
+            if (requireDeclared)
+            {
+                ValidateDeclaredVariable(name, lineNumber, diagnostics, declaredVariables);
+            }
+            else
+            {
+                declaredVariables.Add(name);
             }
         }
     }
@@ -213,7 +251,7 @@ internal sealed class PseudoSyntaxValidator
         }
     }
 
-    private static void ValidateAssignment(string line, int assignmentIndex, int lineNumber, List<string> diagnostics)
+    private void ValidateAssignment(string line, int assignmentIndex, int lineNumber, List<string> diagnostics, HashSet<string> declaredVariables)
     {
         var name = line[..assignmentIndex].Trim();
         var expression = line[(assignmentIndex + 2)..].Trim();
@@ -221,14 +259,22 @@ internal sealed class PseudoSyntaxValidator
         {
             diagnostics.Add($"Linea {lineNumber}: '{name}' no es un destino de asignacion valido. Causa: el lado izquierdo debe ser una variable. Solucion: usa algo como 'total <- 10'.");
         }
+        else
+        {
+            ValidateDeclaredVariable(name, lineNumber, diagnostics, declaredVariables);
+        }
 
         if (expression.Length == 0)
         {
             diagnostics.Add($"Linea {lineNumber}: asignacion incompleta. Causa: falta la expresion despues de '<-'. Solucion: agrega un valor o calculo.");
         }
+        else
+        {
+            ValidateExpressionVariables(expression, lineNumber, diagnostics, declaredVariables);
+        }
     }
 
-    private void ValidateWait(string payload, int lineNumber, List<string> diagnostics)
+    private void ValidateWait(string payload, int lineNumber, List<string> diagnostics, HashSet<string> declaredVariables)
     {
         payload = payload.Trim();
         _ = TryRemoveTrailingKeyword(ref payload, _language.Keyword("milliseconds")) ||
@@ -241,6 +287,70 @@ internal sealed class PseudoSyntaxValidator
         if (payload.Length == 0)
         {
             diagnostics.Add($"Linea {lineNumber}: '{_language.Keyword("wait")}' necesita una duracion. Causa: no hay tiempo indicado. Solucion: usa '{_language.Keyword("wait")} 1 {_language.Keyword("seconds")}'.");
+        }
+        else
+        {
+            ValidateExpressionVariables(payload, lineNumber, diagnostics, declaredVariables);
+        }
+    }
+
+    private void ValidateDeclaredVariable(string name, int lineNumber, List<string> diagnostics, HashSet<string> declaredVariables)
+    {
+        if (!declaredVariables.Contains(name))
+        {
+            diagnostics.Add($"Linea {lineNumber}: la variable '{name}' no esta declarada. Causa: se usa antes de una instruccion '{_language.Keyword("declare")}'. Solucion: agrega '{_language.Keyword("declare")} {name} {_language.Keyword("typeSeparator")} Real' antes de usarla.");
+        }
+    }
+
+    private void ValidateExpressionVariables(string expression, int lineNumber, List<string> diagnostics, HashSet<string> declaredVariables)
+    {
+        foreach (var name in FindIdentifiersOutsideStrings(expression).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (IsExpressionKeyword(name))
+            {
+                continue;
+            }
+
+            ValidateDeclaredVariable(name, lineNumber, diagnostics, declaredVariables);
+        }
+    }
+
+    private bool IsExpressionKeyword(string name) =>
+        _language.IsKeyword(name, "true") ||
+        _language.IsKeyword(name, "false") ||
+        _language.IsKeyword(name, "and") ||
+        _language.IsKeyword(name, "or") ||
+        _language.IsKeyword(name, "not");
+
+    private static IEnumerable<string> FindIdentifiersOutsideStrings(string expression)
+    {
+        var start = 0;
+        var inString = false;
+        for (var index = 0; index < expression.Length; index++)
+        {
+            if (expression[index] != '"')
+            {
+                continue;
+            }
+
+            if (!inString && start < index)
+            {
+                foreach (Match match in Regex.Matches(expression[start..index], @"\b[A-Za-z_][A-Za-z0-9_]*\b"))
+                {
+                    yield return match.Value;
+                }
+            }
+
+            inString = !inString;
+            start = index + 1;
+        }
+
+        if (!inString && start < expression.Length)
+        {
+            foreach (Match match in Regex.Matches(expression[start..], @"\b[A-Za-z_][A-Za-z0-9_]*\b"))
+            {
+                yield return match.Value;
+            }
         }
     }
 
