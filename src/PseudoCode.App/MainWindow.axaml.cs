@@ -71,6 +71,8 @@ public partial class MainWindow : Window
     private double _interfaceScale = DefaultInterfaceScale;
     private int _newAlgorithmNumber = 1;
     private bool _isSwitchingDocument;
+    private bool _isPromptingWindowClose;
+    private bool _allowWindowClose;
     private bool _showDiagnostics;
     private bool _isLightTheme;
     private bool _isHelpVisible = true;
@@ -99,6 +101,7 @@ public partial class MainWindow : Window
         BuildEditorTools();
         BuildHelpTopics();
         RenderRecentDocumentsMenu();
+        Closing += MainWindow_Closing;
         DragDrop.SetAllowDrop(this, true);
         DragDrop.SetAllowDrop(EditorTextBox, true);
         AddHandler(DragDrop.DragOverEvent, Editor_DragOver);
@@ -143,6 +146,34 @@ public partial class MainWindow : Window
         if (_currentDocument is not null)
         {
             await CloseDocumentAsync(_currentDocument);
+        }
+    }
+
+    private async void MainWindow_Closing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_allowWindowClose)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (_isPromptingWindowClose)
+        {
+            return;
+        }
+
+        _isPromptingWindowClose = true;
+        try
+        {
+            if (await ConfirmCloseWindowAsync())
+            {
+                _allowWindowClose = true;
+                Close();
+            }
+        }
+        finally
+        {
+            _isPromptingWindowClose = false;
         }
     }
 
@@ -2260,6 +2291,34 @@ public partial class MainWindow : Window
         }
 
         UpdateWindowState($"Cerrado: {document.DisplayName}");
+    }
+
+    private async Task<bool> ConfirmCloseWindowAsync()
+    {
+        SaveCurrentDocumentState();
+
+        foreach (var document in _openDocuments.ToArray())
+        {
+            if (!document.HasUnsavedChanges)
+            {
+                continue;
+            }
+
+            var choice = await AskCloseUnsavedDocumentAsync(document);
+            if (choice == CloseDocumentChoice.Cancel)
+            {
+                UpdateWindowState("Cierre de la app cancelado");
+                return false;
+            }
+
+            if (choice == CloseDocumentChoice.Save && !await SaveDocumentAsync(document))
+            {
+                UpdateWindowState("Cierre de la app cancelado");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void ClearEditorWorkspace()
