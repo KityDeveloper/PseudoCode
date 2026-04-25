@@ -357,7 +357,12 @@ internal sealed class AdvancedPseudoInterpreter
                 {
                     if (Identifier.IsMatch(name))
                     {
-                        _declaredVariables.Add(name);
+                        if (!_declaredVariables.Add(name))
+                        {
+                            AddRuntime(node.Line, $"la variable '{name}' ya fue declarada", $"una variable no puede declararse mas de una vez", $"elimina la declaracion repetida o usa otro nombre");
+                            continue;
+                        }
+
                         _variables.TryAdd(name, 0d);
                     }
                     else AddRuntime(node.Line, $"'{name}' no es un nombre valido", "usa caracteres no permitidos", "usa letras, numeros y guion bajo");

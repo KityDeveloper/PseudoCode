@@ -238,7 +238,10 @@ internal sealed class PseudoSyntaxValidator
             }
             else
             {
-                declaredVariables.Add(name);
+                if (!declaredVariables.Add(name))
+                {
+                    diagnostics.Add($"Linea {lineNumber}: la variable '{name}' ya fue declarada. Causa: una variable no puede declararse mas de una vez. Solucion: elimina la declaracion repetida o usa otro nombre.");
+                }
             }
         }
     }

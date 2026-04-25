@@ -130,7 +130,12 @@ public sealed class PseudoInterpreter
                 continue;
             }
 
-            _declaredVariables.Add(rawName);
+            if (!_declaredVariables.Add(rawName))
+            {
+                _diagnostics.Add($"Linea {lineNumber}: la variable '{rawName}' ya fue declarada. Causa: una variable no puede declararse mas de una vez. Solucion: elimina la declaracion repetida o usa otro nombre.");
+                continue;
+            }
+
             _variables.TryAdd(rawName, 0d);
         }
     }
