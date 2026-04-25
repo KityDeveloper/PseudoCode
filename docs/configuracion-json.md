@@ -44,11 +44,19 @@ macOS: ~/Library/Application Support/PseudoCode/settings/
     "interfaceScale": 1,
     "syntaxThemeDark": "dark",
     "syntaxThemeLight": "light"
+  },
+  "diagnostic": {
+    "enabled": false,
+    "features": {
+      "clicks": false,
+      "keystrokes": false,
+      "mousePosition": true
+    }
   }
 }
 ```
 
-El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`. `fontSize` guarda el tamano del texto del editor y `interfaceScale` guarda el zoom general de la interfaz; ambos se mantienen entre reinicios.
+El dialecto principal por defecto es `pseint`. El tema principal por defecto es `dark`. `fontSize` guarda el tamano del texto del editor y `interfaceScale` guarda el zoom general de la interfaz; ambos se mantienen entre reinicios. `diagnostic.enabled` activa el modo diagnostico y `diagnostic.features` decide que registrar: `clicks`, `keystrokes` y `mousePosition`.
 
 En la app puedes abrir el menu **Configuracion** para editar estos archivos sin salir de PseudoCode:
 
@@ -213,6 +221,14 @@ La app actualiza automaticamente el settings de usuario para seleccionar el dial
     "interfaceScale": 1,
     "syntaxThemeDark": "dark",
     "syntaxThemeLight": "light"
+  },
+  "diagnostic": {
+    "enabled": false,
+    "features": {
+      "clicks": false,
+      "keystrokes": false,
+      "mousePosition": true
+    }
   }
 }
 ```

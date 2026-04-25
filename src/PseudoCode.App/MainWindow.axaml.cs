@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private const double MinInterfaceScale = 0.8;
     private const double MaxInterfaceScale = 1.4;
     private const double InterfaceScaleStep = 0.1;
+    private const int MouseClickDiagnosticsLimit = 18;
+    private const int ContextMenuDiagnosticsLimit = 80;
     private static readonly string[] ThemeColorKeys =
     [
         "keyword",
@@ -85,6 +87,10 @@ public partial class MainWindow : Window
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
     private DebugLineRenderer? _debugLineRenderer;
+    private readonly Queue<string> _mouseClickDiagnosticsLines = new();
+    private readonly Queue<string> _contextMenuDiagnosticsLines = new();
+    private bool _copiedWholeLine;
+    private Point? _lastContextMenuOpenPoint;
 
     public MainWindow()
     {
@@ -106,6 +112,11 @@ public partial class MainWindow : Window
         DragDrop.SetAllowDrop(EditorTextBox, true);
         AddHandler(DragDrop.DragOverEvent, Editor_DragOver);
         AddHandler(DragDrop.DropEvent, Editor_Drop);
+        AddHandler(InputElement.PointerPressedEvent, MainWindow_PointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(InputElement.PointerReleasedEvent, MainWindow_PointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(InputElement.PointerMovedEvent, MainWindow_PointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(InputElement.KeyDownEvent, MainWindow_DiagnosticKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConfigureMouseClickDiagnostics();
         UpdateLineNumbers();
         UpdateEmptyWorkspaceState();
         UpdateExecutionControls();
@@ -415,6 +426,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.L)
+        {
+            e.Handled = true;
+            await ShowGoToLineDialogAsync();
+            return;
+        }
+
         if (TryHandleFormatShortcut(e))
         {
             return;
@@ -473,8 +491,58 @@ public partial class MainWindow : Window
         UpdateWindowState("Texto seleccionado");
     }
 
+    private async void Copy_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseCustomEditorContextMenuAfterAction();
+        await CopySelectionAsync();
+    }
+
+    private async void Cut_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseCustomEditorContextMenuAfterAction();
+        await CutSelectionAsync();
+    }
+
+    private async void Paste_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseCustomEditorContextMenuAfterAction();
+        await PasteClipboardAsync();
+    }
+
+    private async void CopyDiagnostics_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Clipboard is null)
+        {
+            return;
+        }
+
+        var text = BuildInputDiagnosticsReport();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        await Clipboard.SetTextAsync(text);
+        UpdateWindowState("Reporte de diagnostico copiado");
+    }
+
+    private void ClearDiagnostics_Click(object? sender, RoutedEventArgs e)
+    {
+        _mouseClickDiagnosticsLines.Clear();
+        _contextMenuDiagnosticsLines.Clear();
+        MouseClickDiagnosticsTextBox.Text = BuildDiagnosticsPanelPlaceholder();
+        UpdateWindowState("Diagnostico limpiado");
+    }
+
+    private void DuplicateLine_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseCustomEditorContextMenuAfterAction();
+        DuplicateCurrentLine();
+    }
+
     private void FormatDocument_Click(object? sender, RoutedEventArgs e)
     {
+        CloseCustomEditorContextMenuAfterAction();
         FormatCurrentDocument();
     }
 
@@ -1011,6 +1079,11 @@ public partial class MainWindow : Window
                 visualTextEditor.Children.Add(BuildVisualTextField("Interface scale", "editor.interfaceScale", GetJsonNumber(root, DefaultInterfaceScale, "editor", "interfaceScale"), value => SetJsonNumber(["editor", "interfaceScale"], value, MinInterfaceScale, MaxInterfaceScale)));
                 visualTextEditor.Children.Add(BuildVisualTextField("Dark syntax theme", "editor.syntaxThemeDark", GetJsonString(root, "editor", "syntaxThemeDark"), value => SetJsonString(["editor", "syntaxThemeDark"], value)));
                 visualTextEditor.Children.Add(BuildVisualTextField("Light syntax theme", "editor.syntaxThemeLight", GetJsonString(root, "editor", "syntaxThemeLight"), value => SetJsonString(["editor", "syntaxThemeLight"], value)));
+                visualTextEditor.Children.Add(BuildVisualSection("Diagnostic", "Habilita diagnosticos y selecciona que datos mostrar en cada evento."));
+                visualTextEditor.Children.Add(BuildVisualTextField("Diagnostic enabled", "diagnostic.enabled", GetJsonBoolean(root, false, "diagnostic", "enabled"), value => SetJsonBool(["diagnostic", "enabled"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Clicks", "diagnostic.features.clicks", GetJsonBoolean(root, false, "diagnostic", "features", "clicks"), value => SetJsonBool(["diagnostic", "features", "clicks"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Keystrokes", "diagnostic.features.keystrokes", GetJsonBoolean(root, false, "diagnostic", "features", "keystrokes"), value => SetJsonBool(["diagnostic", "features", "keystrokes"], value)));
+                visualTextEditor.Children.Add(BuildVisualTextField("Mouse position", "diagnostic.features.mousePosition", GetJsonBoolean(root, true, "diagnostic", "features", "mousePosition"), value => SetJsonBool(["diagnostic", "features", "mousePosition"], value)));
                 return;
             }
 
@@ -1089,6 +1162,27 @@ public partial class MainWindow : Window
                 }
 
                 var updated = TrySetJsonNumber(editor.Text ?? string.Empty, path, Math.Clamp(number, min, max));
+                if (updated is null)
+                {
+                    status.Text = $"No pude actualizar {string.Join('.', path)}.";
+                    return;
+                }
+
+                isSyncingVisualEditor = true;
+                editor.Text = updated;
+                isSyncingVisualEditor = false;
+                UpdateCodePreview();
+            }
+
+            void SetJsonBool(string[] path, string value)
+            {
+                if (!bool.TryParse(value, out var parsed))
+                {
+                    status.Text = $"{string.Join('.', path)} debe ser true o false.";
+                    return;
+                }
+
+                var updated = TrySetJsonBool(editor.Text ?? string.Empty, path, parsed);
                 if (updated is null)
                 {
                     status.Text = $"No pude actualizar {string.Join('.', path)}.";
@@ -1766,6 +1860,19 @@ public partial class MainWindow : Window
             : fallback.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    private static string GetJsonBoolean(JsonObject root, bool fallback, params string[] path)
+    {
+        JsonNode? node = root;
+        foreach (var segment in path)
+        {
+            node = node?[segment];
+        }
+
+        return node is JsonValue value && value.TryGetValue<bool>(out var boolean)
+            ? boolean.ToString().ToLowerInvariant()
+            : fallback.ToString().ToLowerInvariant();
+    }
+
     private static IEnumerable<string> GetJsonStringArray(JsonObject root, params string[] path)
     {
         JsonNode? node = root;
@@ -1804,6 +1911,18 @@ public partial class MainWindow : Window
     }
 
     private static string? TrySetJsonNumber(string json, IReadOnlyList<string> path, double value)
+    {
+        if (!TryParseJsonObject(json, out var root) || path.Count == 0)
+        {
+            return null;
+        }
+
+        var parent = EnsureJsonParent(root, path);
+        parent[path[^1]] = value;
+        return root.ToJsonString(JsonWriteOptions) + Environment.NewLine;
+    }
+
+    private static string? TrySetJsonBool(string json, IReadOnlyList<string> path, bool value)
     {
         if (!TryParseJsonObject(json, out var root) || path.Count == 0)
         {
@@ -1996,6 +2115,7 @@ public partial class MainWindow : Window
         TemplatesPanel.Children.Clear();
         BuildHelpTopics();
         BuildEditorTools();
+        ConfigureMouseClickDiagnostics();
 
         if (_currentDocument is not null)
         {
@@ -2009,6 +2129,208 @@ public partial class MainWindow : Window
         RenderOpenDocuments();
         UpdateOutputPanelView();
         UpdateWindowState($"Configuracion aplicada: {_language.DisplayName}");
+    }
+
+    private void ConfigureMouseClickDiagnostics()
+    {
+        var enabled = IsDiagnosticPanelEnabled();
+        MouseClickDiagnosticsPanel.IsVisible = enabled;
+        _mouseClickDiagnosticsLines.Clear();
+        _contextMenuDiagnosticsLines.Clear();
+        if (enabled)
+        {
+            MouseClickDiagnosticsTextBox.Text = BuildDiagnosticsPanelPlaceholder();
+        }
+    }
+
+    private void MainWindow_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Mouse)
+        {
+            var sourceControl = e.Source as Control;
+            var mousePoint = e.GetCurrentPoint(this);
+            var insideEditor = IsPointInsideEditor(mousePoint.Position);
+
+            if (mousePoint.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed && EditorContextMenuPopup.IsVisible && IsPointInsideContextMenuPopup(mousePoint.Position))
+            {
+                var item = GetContextMenuItemAtWindowPoint(mousePoint.Position);
+                if (item is not null)
+                {
+                    item.Focus();
+                    LogContextMenuDiagnostic($"pointer-pressed left menu-hit item={DescribeControl(item)} window={FormatPoint(mousePoint.Position)}");
+                }
+
+                e.Handled = true;
+                return;
+            }
+
+            if (mousePoint.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed)
+            {
+                LogContextMenuDiagnostic(
+                    $"pointer-pressed right inside-editor={insideEditor} window={FormatPoint(mousePoint.Position)} source={DescribeControl(sourceControl)} path={DescribeControlPath(sourceControl)}");
+                LogPointerContextSnapshot("pointer-pressed", e, sourceControl, insideEditor);
+            }
+
+            if (mousePoint.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed && insideEditor)
+            {
+                if (_currentDocument is null)
+                {
+                    LogContextMenuDiagnostic("pointer-pressed skipped-menu no-current-document");
+                    HideCustomEditorContextMenu();
+                    return;
+                }
+
+                MoveCaretToRightClickPosition(e);
+                EditorTextBox.Focus();
+                LogContextMenuDiagnostic("pointer-pressed using-press-to-toggle-menu");
+                ToggleCustomEditorContextMenu(e);
+                e.Handled = true;
+                return;
+            }
+            else if (mousePoint.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed && EditorContextMenuPopup.IsVisible && !IsPointInsideContextMenuPopup(mousePoint.Position))
+            {
+                LogContextMenuDiagnostic($"pointer-pressed left closing-menu source={DescribeControl(sourceControl)} window={FormatPoint(mousePoint.Position)}");
+                HideCustomEditorContextMenu();
+            }
+        }
+
+        if (!IsMouseClickDiagnosticsEnabled() || e.Pointer.Type != PointerType.Mouse)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(this);
+        var target = e.Source as Control;
+        var line = BuildMouseDiagnosticLine(point, target?.Name ?? e.Source?.GetType().Name ?? "Control");
+        EnqueueMouseDiagnostic(line);
+    }
+
+    private void MainWindow_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.Pointer.Type != PointerType.Mouse)
+        {
+            return;
+        }
+
+        var sourceControl = e.Source as Control;
+        var point = e.GetCurrentPoint(this);
+        var insideEditor = IsPointInsideEditor(point.Position);
+
+        if (point.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonReleased)
+        {
+            LogContextMenuDiagnostic(
+                $"pointer-released right inside-editor={insideEditor} window={FormatPoint(point.Position)} source={DescribeControl(sourceControl)} path={DescribeControlPath(sourceControl)} menu-visible={EditorContextMenuPopup.IsVisible}");
+            LogPointerContextSnapshot("pointer-released", e, sourceControl, insideEditor);
+        }
+
+        if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonReleased && EditorContextMenuPopup.IsVisible && IsPointInsideContextMenuPopup(point.Position))
+        {
+            var item = GetContextMenuItemAtWindowPoint(point.Position);
+            if (item is not null)
+            {
+                LogContextMenuDiagnostic($"pointer-released left menu-execute item={DescribeControl(item)} window={FormatPoint(point.Position)}");
+                ExecuteContextMenuItem(item);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonReleased && EditorContextMenuPopup.IsVisible && !IsPointInsideContextMenuPopup(point.Position))
+        {
+            LogContextMenuDiagnostic($"pointer-released left closing-menu source={DescribeControl(sourceControl)} window={FormatPoint(point.Position)}");
+            HideCustomEditorContextMenu();
+        }
+    }
+
+    private void MainWindow_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type != PointerType.Mouse || !EditorContextMenuPopup.IsVisible)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(this);
+        if (!IsPointInsideContextMenuPopup(point.Position))
+        {
+            return;
+        }
+
+        var item = GetContextMenuItemAtWindowPoint(point.Position);
+        if (item is not null && !item.IsFocused)
+        {
+            item.Focus();
+        }
+    }
+
+    private void MainWindow_DiagnosticKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!_runtimeSettings.Diagnostic.Enabled || !_runtimeSettings.Diagnostic.Features.Keystrokes)
+        {
+            return;
+        }
+
+        var sourceControl = e.Source as Control;
+        var sourceName = sourceControl?.Name ?? e.Source?.GetType().Name ?? "Control";
+        var keyLabel = BuildKeystrokeLabel(e);
+        EnqueueMouseDiagnostic($"{DateTime.Now:HH:mm:ss}  Key  {keyLabel}  {sourceName}");
+    }
+
+    private static string FormatMouseButton(PointerUpdateKind kind) => kind switch
+    {
+        PointerUpdateKind.LeftButtonPressed => "Left",
+        PointerUpdateKind.RightButtonPressed => "Right",
+        PointerUpdateKind.MiddleButtonPressed => "Middle",
+        PointerUpdateKind.XButton1Pressed => "X1",
+        PointerUpdateKind.XButton2Pressed => "X2",
+        _ => "Mouse"
+    };
+
+    private bool IsMouseClickDiagnosticsEnabled() =>
+        _runtimeSettings.Diagnostic.Enabled && _runtimeSettings.Diagnostic.Features.Clicks;
+
+    private bool IsDiagnosticPanelEnabled() =>
+        _runtimeSettings.Diagnostic.Enabled &&
+        (_runtimeSettings.Diagnostic.Features.Clicks || _runtimeSettings.Diagnostic.Features.Keystrokes);
+
+    private string BuildMouseDiagnosticLine(PointerPoint point, string sourceName)
+    {
+        var parts = new List<string>(4)
+        {
+            DateTime.Now.ToString("HH:mm:ss"),
+            "Click",
+            FormatMouseButton(point.Properties.PointerUpdateKind)
+        };
+        if (_runtimeSettings.Diagnostic.Features.MousePosition)
+        {
+            var position = point.Position;
+            parts.Add($"X:{position.X,5:0} Y:{position.Y,5:0}");
+        }
+
+        parts.Add(sourceName);
+        return string.Join("  ", parts);
+    }
+
+    private static string BuildKeystrokeLabel(KeyEventArgs e)
+    {
+        var parts = new List<string>(4);
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            parts.Add("Ctrl");
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            parts.Add("Shift");
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            parts.Add("Alt");
+        }
+
+        parts.Add(e.Key.ToString());
+        return string.Join("+", parts);
     }
 
     private async void About_Click(object? sender, RoutedEventArgs e)
@@ -2708,7 +3030,11 @@ public partial class MainWindow : Window
         ConfigureEditorContextMenu();
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
-        EditorTextBox.TextArea.KeyDown += Editor_KeyDown;
+        EditorTextBox.TextArea.AddHandler(
+            InputElement.KeyDownEvent,
+            Editor_KeyDown,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
         EditorTextBox.AddHandler(
             InputElement.PointerWheelChangedEvent,
             Editor_PointerWheelChanged,
@@ -2718,19 +3044,395 @@ public partial class MainWindow : Window
 
     private void ConfigureEditorContextMenu()
     {
-        var formatItem = new MenuItem
-        {
-            Header = "Formatear documento (Ctrl+Shift+F)"
-        };
-        formatItem.Click += FormatDocument_Click;
+        EditorTextBox.ContextMenu = null;
+        EditorTextBox.TextArea.ContextMenu = null;
+        EditorTextBox.TextArea.TextView.ContextMenu = null;
+    }
 
-        EditorTextBox.ContextMenu = new ContextMenu
+    private void MoveCaretToRightClickPosition(PointerEventArgs e)
+    {
+        var document = EditorTextBox.Document;
+        if (document is null)
         {
-            Items =
+            LogContextMenuDiagnostic("caret-move skipped document-null");
+            return;
+        }
+
+        var textView = EditorTextBox.TextArea.TextView;
+        var pointInTextView = e.GetPosition(textView);
+        var viewPosition = textView.GetPositionFloor(pointInTextView);
+        if (viewPosition is null)
+        {
+            LogContextMenuDiagnostic(
+                $"caret-move skipped no-view-position text-view={FormatPoint(pointInTextView)} text-area={FormatPoint(e.GetPosition(EditorTextBox.TextArea))} editor={FormatPoint(e.GetPosition(EditorTextBox))}");
+            return;
+        }
+
+        var offset = document.GetOffset(viewPosition.Value.Location);
+        var safeOffset = Math.Clamp(offset, 0, document.TextLength);
+        EditorTextBox.CaretOffset = safeOffset;
+        EditorTextBox.Select(safeOffset, 0);
+        LogContextMenuDiagnostic(
+            $"caret-move offset={safeOffset} line={document.GetLineByOffset(safeOffset).LineNumber} text-view={FormatPoint(pointInTextView)}");
+    }
+
+    private void ToggleCustomEditorContextMenu(PointerEventArgs e)
+    {
+        if (EditorContextMenuPopup.IsVisible)
+        {
+            LogContextMenuDiagnostic("toggle-menu closing existing popup");
+            HideCustomEditorContextMenu();
+            return;
+        }
+
+        var editorPoint = e.GetPosition(EditorTextBox);
+        var editorOrigin = EditorTextBox.TranslatePoint(new Point(0, 0), EditorContextMenuOverlay) ?? default;
+        var overlayPoint = new Point(editorOrigin.X + editorPoint.X, editorOrigin.Y + editorPoint.Y);
+        _lastContextMenuOpenPoint = overlayPoint;
+        LogContextMenuDiagnostic(
+            $"toggle-menu opening editor={FormatPoint(editorPoint)} editor-origin-in-overlay={FormatPoint(editorOrigin)} overlay={FormatPoint(overlayPoint)}");
+        ShowCustomEditorContextMenu(overlayPoint);
+    }
+
+    private void ShowCustomEditorContextMenu(Point point)
+    {
+        EditorTextBox.IsHitTestVisible = false;
+        EditorContextMenuOverlay.IsVisible = true;
+        EditorContextMenuPopup.IsVisible = true;
+        PositionCustomEditorContextMenu(point, deferIfNeeded: true);
+    }
+
+    private void HideCustomEditorContextMenu()
+    {
+        _lastContextMenuOpenPoint = null;
+        EditorTextBox.IsHitTestVisible = true;
+        EditorTextBox.Focusable = true;
+        EditorContextMenuPopup.IsVisible = false;
+        EditorContextMenuOverlay.IsVisible = false;
+        LogContextMenuDiagnostic("hide-menu");
+    }
+
+    private void EditorContextMenuOverlay_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == EditorContextMenuOverlay)
+        {
+            HideCustomEditorContextMenu();
+            e.Handled = true;
+        }
+    }
+
+    private void CloseCustomEditorContextMenuAfterAction()
+    {
+        HideCustomEditorContextMenu();
+    }
+
+    private void PositionCustomEditorContextMenu(Point point, bool deferIfNeeded)
+    {
+        EditorContextMenuPopup.Measure(Bounds.Size);
+        var popupSize = EditorContextMenuPopup.DesiredSize;
+        var overlayWidth = EditorContextMenuOverlay.Bounds.Width;
+        var overlayHeight = EditorContextMenuOverlay.Bounds.Height;
+
+        if (deferIfNeeded && (overlayWidth <= 0 || overlayHeight <= 0))
+        {
+            LogContextMenuDiagnostic(
+                $"show-menu deferred requested={FormatPoint(point)} overlay-bounds={FormatRect(new Rect(EditorContextMenuOverlay.Bounds.Position, EditorContextMenuOverlay.Bounds.Size))}");
+            Dispatcher.UIThread.Post(() => PositionCustomEditorContextMenu(point, deferIfNeeded: false), DispatcherPriority.Render);
+            return;
+        }
+
+        var maxX = Math.Max(0, overlayWidth - popupSize.Width - 4);
+        var maxY = Math.Max(0, overlayHeight - popupSize.Height - 4);
+        var x = Math.Clamp(point.X, 0, maxX);
+        var y = Math.Clamp(point.Y, 0, maxY);
+
+        Canvas.SetLeft(EditorContextMenuPopup, x);
+        Canvas.SetTop(EditorContextMenuPopup, y);
+        LogContextMenuDiagnostic(
+            $"show-menu requested={FormatPoint(point)} final={FormatPoint(new Point(x, y))} overlay-bounds={FormatRect(new Rect(EditorContextMenuOverlay.Bounds.Position, EditorContextMenuOverlay.Bounds.Size))} popup-size={popupSize.Width:0}x{popupSize.Height:0}");
+        Dispatcher.UIThread.Post(() =>
+        {
+            EditorTextBox.Focusable = false;
+            FocusContextMenuItemAtOpenPoint();
+            LogContextMenuDiagnostic(
+                $"show-menu post-focus popup-visible={EditorContextMenuPopup.IsVisible} overlay-visible={EditorContextMenuOverlay.IsVisible} first-item-focused={EditorContextMenuFirstItem.IsFocused} popup-bounds-in-window={FormatRect(GetBoundsInWindow(EditorContextMenuPopup))}");
+        }, DispatcherPriority.Input);
+    }
+
+    private void FocusContextMenuItemAtOpenPoint()
+    {
+        var target = GetContextMenuItemAtOpenPoint() ?? EditorContextMenuFirstItem;
+        target.Focus();
+        LogContextMenuDiagnostic($"focus-menu-item target={DescribeControl(target)}");
+    }
+
+    private Button? GetContextMenuItemAtOpenPoint()
+    {
+        if (_lastContextMenuOpenPoint is not { } openPoint)
+        {
+            return null;
+        }
+
+        var popupLeft = Canvas.GetLeft(EditorContextMenuPopup);
+        var popupTop = Canvas.GetTop(EditorContextMenuPopup);
+        if (double.IsNaN(popupLeft) || double.IsNaN(popupTop))
+        {
+            return null;
+        }
+
+        var pointInPopup = new Point(openPoint.X - popupLeft, openPoint.Y - popupTop);
+        foreach (var item in EnumerateContextMenuItems())
+        {
+            var itemRect = new Rect(item.Bounds.Position, item.Bounds.Size);
+            if (itemRect.Contains(pointInPopup))
             {
-                formatItem
+                return item;
             }
-        };
+        }
+
+        return null;
+    }
+
+    private IEnumerable<Button> EnumerateContextMenuItems()
+    {
+        yield return EditorContextMenuFirstItem;
+        yield return EditorContextMenuCutItem;
+        yield return EditorContextMenuPasteItem;
+        yield return EditorContextMenuDuplicateItem;
+        yield return EditorContextMenuFormatItem;
+    }
+
+    private Button? GetContextMenuItemAtWindowPoint(Point windowPoint)
+    {
+        foreach (var item in EnumerateContextMenuItems())
+        {
+            if (GetBoundsInWindow(item).Contains(windowPoint))
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    private void ExecuteContextMenuItem(Button item)
+    {
+        if (ReferenceEquals(item, EditorContextMenuFirstItem))
+        {
+            Copy_Click(item, new RoutedEventArgs());
+            return;
+        }
+
+        if (ReferenceEquals(item, EditorContextMenuCutItem))
+        {
+            Cut_Click(item, new RoutedEventArgs());
+            return;
+        }
+
+        if (ReferenceEquals(item, EditorContextMenuPasteItem))
+        {
+            Paste_Click(item, new RoutedEventArgs());
+            return;
+        }
+
+        if (ReferenceEquals(item, EditorContextMenuDuplicateItem))
+        {
+            DuplicateLine_Click(item, new RoutedEventArgs());
+            return;
+        }
+
+        if (ReferenceEquals(item, EditorContextMenuFormatItem))
+        {
+            FormatDocument_Click(item, new RoutedEventArgs());
+        }
+    }
+
+    private void LogContextMenuDiagnostic(string message)
+    {
+        if (!_runtimeSettings.Diagnostic.Enabled)
+        {
+            return;
+        }
+
+        _contextMenuDiagnosticsLines.Enqueue($"{DateTime.Now:HH:mm:ss.fff}  {message}");
+        while (_contextMenuDiagnosticsLines.Count > ContextMenuDiagnosticsLimit)
+        {
+            _contextMenuDiagnosticsLines.Dequeue();
+        }
+
+        UpdateDiagnosticsTextBox();
+    }
+
+    private void EnqueueMouseDiagnostic(string line)
+    {
+        _mouseClickDiagnosticsLines.Enqueue(line);
+        while (_mouseClickDiagnosticsLines.Count > MouseClickDiagnosticsLimit)
+        {
+            _mouseClickDiagnosticsLines.Dequeue();
+        }
+
+        UpdateDiagnosticsTextBox();
+    }
+
+    private void UpdateDiagnosticsTextBox()
+    {
+        var lines = _contextMenuDiagnosticsLines
+            .Concat(_mouseClickDiagnosticsLines)
+            .TakeLast(ContextMenuDiagnosticsLimit + MouseClickDiagnosticsLimit)
+            .ToArray();
+        MouseClickDiagnosticsTextBox.Text = lines.Length == 0
+            ? BuildDiagnosticsPanelPlaceholder()
+            : string.Join(Environment.NewLine, lines.Reverse());
+    }
+
+    private string BuildDiagnosticsPanelPlaceholder() =>
+        "Modo diagnostico activo. Haz click derecho dentro del editor y luego pulsa 'Copiar reporte'.";
+
+    private string BuildInputDiagnosticsReport()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("=== PseudoCode Input Diagnostics ===");
+        builder.AppendLine($"TimeUtc: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC");
+        builder.AppendLine($"OS: {Environment.OSVersion}");
+        builder.AppendLine($"Framework: {Environment.Version}");
+        builder.AppendLine($"Diagnostic.Enabled: {_runtimeSettings.Diagnostic.Enabled}");
+        builder.AppendLine($"Diagnostic.Clicks: {_runtimeSettings.Diagnostic.Features.Clicks}");
+        builder.AppendLine($"Diagnostic.Keystrokes: {_runtimeSettings.Diagnostic.Features.Keystrokes}");
+        builder.AppendLine($"Diagnostic.MousePosition: {_runtimeSettings.Diagnostic.Features.MousePosition}");
+        builder.AppendLine($"Window.Bounds: {FormatRect(Bounds)}");
+        builder.AppendLine($"Editor.BoundsLocal: {FormatRect(new Rect(EditorTextBox.Bounds.Position, EditorTextBox.Bounds.Size))}");
+        builder.AppendLine($"Editor.BoundsInWindow: {FormatRect(GetBoundsInWindow(EditorTextBox))}");
+        builder.AppendLine($"TextArea.BoundsInWindow: {FormatRect(GetBoundsInWindow(EditorTextBox.TextArea))}");
+        builder.AppendLine($"TextView.BoundsInWindow: {FormatRect(GetBoundsInWindow(EditorTextBox.TextArea.TextView))}");
+        builder.AppendLine($"Overlay.Visible: {EditorContextMenuOverlay.IsVisible}");
+        builder.AppendLine($"Overlay.Bounds: {FormatRect(new Rect(EditorContextMenuOverlay.Bounds.Position, EditorContextMenuOverlay.Bounds.Size))}");
+        builder.AppendLine($"Overlay.BoundsInWindow: {FormatRect(GetBoundsInWindow(EditorContextMenuOverlay))}");
+        builder.AppendLine($"Popup.Visible: {EditorContextMenuPopup.IsVisible}");
+        builder.AppendLine($"Popup.Bounds: {FormatRect(new Rect(EditorContextMenuPopup.Bounds.Position, EditorContextMenuPopup.Bounds.Size))}");
+        builder.AppendLine($"Popup.BoundsInWindow: {FormatRect(GetBoundsInWindow(EditorContextMenuPopup))}");
+        builder.AppendLine($"Popup.CanvasLeft: {Canvas.GetLeft(EditorContextMenuPopup):0.##}");
+        builder.AppendLine($"Popup.CanvasTop: {Canvas.GetTop(EditorContextMenuPopup):0.##}");
+        builder.AppendLine($"Popup.Focus: {EditorContextMenuPopup.IsFocused}");
+        builder.AppendLine($"FirstItem.Focus: {EditorContextMenuFirstItem.IsFocused}");
+        builder.AppendLine($"EditorOriginInOverlay: {FormatPoint(EditorTextBox.TranslatePoint(new Point(0, 0), EditorContextMenuOverlay) ?? default)}");
+        builder.AppendLine($"EditorOriginInWindow: {FormatPoint(EditorTextBox.TranslatePoint(new Point(0, 0), this) ?? default)}");
+        builder.AppendLine($"Popup.ZIndex: {EditorContextMenuPopup.ZIndex}");
+        builder.AppendLine($"Overlay.ZIndex: {EditorContextMenuOverlay.ZIndex}");
+
+        if (EditorTextBox.Document is not null)
+        {
+            var caretOffset = Math.Clamp(EditorTextBox.CaretOffset, 0, EditorTextBox.Document.TextLength);
+            var caretLine = EditorTextBox.Document.GetLineByOffset(caretOffset).LineNumber;
+            builder.AppendLine($"Caret.Offset: {caretOffset}");
+            builder.AppendLine($"Caret.Line: {caretLine}");
+            builder.AppendLine($"Document.LineCount: {EditorTextBox.Document.LineCount}");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("LastContextMenuEvents:");
+        AppendDiagnosticsSection(builder, _contextMenuDiagnosticsLines);
+        builder.AppendLine();
+        builder.AppendLine("LastMouseAndKeyEvents:");
+        AppendDiagnosticsSection(builder, _mouseClickDiagnosticsLines);
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendDiagnosticsSection(StringBuilder builder, IEnumerable<string> lines)
+    {
+        var any = false;
+        foreach (var line in lines)
+        {
+            builder.AppendLine(line);
+            any = true;
+        }
+
+        if (!any)
+        {
+            builder.AppendLine("(empty)");
+        }
+    }
+
+    private Rect GetBoundsInWindow(Control control)
+    {
+        var origin = control.TranslatePoint(new Point(0, 0), this);
+        return origin is null
+            ? default
+            : new Rect(origin.Value, control.Bounds.Size);
+    }
+
+    private static string FormatRect(Rect rect) =>
+        $"x={rect.X:0.##} y={rect.Y:0.##} w={rect.Width:0.##} h={rect.Height:0.##}";
+
+    private static string FormatPoint(Point point) =>
+        $"x={point.X:0.##} y={point.Y:0.##}";
+
+    private static string DescribeControl(Control? control) =>
+        control?.Name ?? control?.GetType().Name ?? "null";
+
+    private static string DescribeControlPath(Control? control)
+    {
+        if (control is null)
+        {
+            return "null";
+        }
+
+        var parts = new List<string>(8);
+        var current = control;
+        while (current is not null && parts.Count < 8)
+        {
+            parts.Add(DescribeControl(current));
+            current = current.Parent as Control;
+        }
+
+        return string.Join(" <- ", parts);
+    }
+
+    private void LogPointerContextSnapshot(string stage, PointerEventArgs e, Control? sourceControl, bool insideEditor)
+    {
+        var inEditor = e.GetPosition(EditorTextBox);
+        var inTextArea = e.GetPosition(EditorTextBox.TextArea);
+        var inTextView = e.GetPosition(EditorTextBox.TextArea.TextView);
+        var inOverlay = e.GetPosition(EditorContextMenuOverlay);
+        LogContextMenuDiagnostic(
+            $"{stage} snapshot inside-editor={insideEditor} source={DescribeControl(sourceControl)} editor={FormatPoint(inEditor)} text-area={FormatPoint(inTextArea)} text-view={FormatPoint(inTextView)} overlay={FormatPoint(inOverlay)}");
+    }
+
+    private bool IsPointInsideEditor(Point windowPoint)
+    {
+        var editorOrigin = EditorTextBox.TranslatePoint(new Point(0, 0), this);
+        if (editorOrigin is null)
+        {
+            return false;
+        }
+
+        var editorRect = new Rect(editorOrigin.Value, EditorTextBox.Bounds.Size);
+        return editorRect.Contains(windowPoint);
+    }
+
+    private bool IsContextMenuSource(Control? control)
+    {
+        var current = control;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, EditorContextMenuPopup) || ReferenceEquals(current, EditorContextMenuOverlay))
+            {
+                return true;
+            }
+
+            current = current.Parent as Control;
+        }
+
+        return false;
+    }
+
+    private bool IsPointInsideContextMenuPopup(Point windowPoint)
+    {
+        if (!EditorContextMenuPopup.IsVisible)
+        {
+            return false;
+        }
+
+        return GetBoundsInWindow(EditorContextMenuPopup).Contains(windowPoint);
     }
 
     private void Editor_TextEntered(object? sender, TextInputEventArgs e)
@@ -2768,6 +3470,44 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            if (e.Key == Key.L)
+            {
+                e.Handled = true;
+                await ShowGoToLineDialogAsync();
+                return;
+            }
+
+            if (e.Key == Key.C)
+            {
+                e.Handled = true;
+                await CopySelectionAsync();
+                return;
+            }
+
+            if (e.Key == Key.X)
+            {
+                e.Handled = true;
+                await CutSelectionAsync();
+                return;
+            }
+
+            if (e.Key == Key.V)
+            {
+                e.Handled = true;
+                await PasteClipboardAsync();
+                return;
+            }
+
+            if (e.Key == Key.D && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                DuplicateCurrentLine();
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             ShowCompletion(force: true);
@@ -2787,6 +3527,153 @@ public partial class MainWindow : Window
             InsertSmartNewLine();
             e.Handled = true;
         }
+    }
+
+    private async Task ShowGoToLineDialogAsync()
+    {
+        if (EditorTextBox.Document is null || EditorTextBox.Document.LineCount == 0)
+        {
+            UpdateWindowState("No hay lineas para navegar");
+            return;
+        }
+
+        var currentLine = EditorTextBox.Document.GetLineByOffset(GetSafeCaretOffset(EditorTextBox.Document)).LineNumber;
+        var maxLine = EditorTextBox.Document.LineCount;
+        var requestedLine = await AskGoToLineAsync(currentLine, maxLine);
+        if (requestedLine is not { } line)
+        {
+            return;
+        }
+
+        GoToLine(line);
+    }
+
+    private async Task<int?> AskGoToLineAsync(int currentLine, int maxLine)
+    {
+        var window = new Window
+        {
+            Title = "Ir a linea",
+            Width = 360,
+            Height = 190,
+            MinWidth = 340,
+            MinHeight = 170,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush("PanelBackground")
+        };
+
+        var input = new TextBox
+        {
+            Text = currentLine.ToString(),
+            Background = Brush("InsetBackground"),
+            Foreground = Brush("TextPrimary"),
+            BorderBrush = Brush("BorderBrushMuted"),
+            FontFamily = new FontFamily("Cascadia Code,Consolas,monospace")
+        };
+        var status = new TextBlock
+        {
+            Foreground = Brush("TextSecondary"),
+            Text = $"Linea actual: {currentLine}. Rango valido: 1..{maxLine}."
+        };
+
+        void Accept()
+        {
+            if (!int.TryParse(input.Text, out var line))
+            {
+                status.Text = "Escribe un numero valido.";
+                return;
+            }
+
+            if (line < 1 || line > maxLine)
+            {
+                status.Text = $"Linea fuera de rango. Usa 1..{maxLine}.";
+                return;
+            }
+
+            window.Close(line);
+        }
+
+        var goButton = new Button
+        {
+            Content = "Ir",
+            Classes = { "command" },
+            MinWidth = 80
+        };
+        goButton.Click += (_, _) => Accept();
+
+        var cancelButton = new Button
+        {
+            Content = "Cancelar",
+            Classes = { "command" },
+            MinWidth = 80
+        };
+        cancelButton.Click += (_, _) => window.Close(null);
+
+        input.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                Accept();
+                args.Handled = true;
+            }
+            else if (args.Key == Key.Escape)
+            {
+                window.Close(null);
+                args.Handled = true;
+            }
+        };
+
+        window.Opened += (_, _) =>
+        {
+            input.Focus();
+            input.SelectAll();
+        };
+
+        window.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Ir a linea",
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Brush("TextPrimary")
+                },
+                input,
+                status,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children =
+                    {
+                        goButton,
+                        cancelButton
+                    }
+                }
+            }
+        };
+
+        var result = await window.ShowDialog<int?>(this);
+        return result;
+    }
+
+    private void GoToLine(int requestedLine)
+    {
+        if (EditorTextBox.Document is null || EditorTextBox.Document.LineCount == 0)
+        {
+            return;
+        }
+
+        var line = Math.Clamp(requestedLine, 1, EditorTextBox.Document.LineCount);
+        var documentLine = EditorTextBox.Document.GetLineByNumber(line);
+        EditorTextBox.Focus();
+        EditorTextBox.Select(documentLine.Offset, Math.Max(1, documentLine.Length));
+        EditorTextBox.CaretOffset = documentLine.Offset;
+        EditorTextBox.ScrollToLine(line);
+        UpdateWindowState($"Linea {line}");
     }
 
     private void Editor_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -3148,6 +4035,326 @@ public partial class MainWindow : Window
 
         document.Insert(offset, text);
         EditorTextBox.CaretOffset = Math.Min(offset + text.Length, document.TextLength);
+    }
+
+    private async Task CopySelectionAsync()
+    {
+        var document = EditorTextBox.Document;
+        if (Clipboard is null || document is null)
+        {
+            return;
+        }
+
+        var selectedText = EditorTextBox.SelectedText;
+        _copiedWholeLine = string.IsNullOrEmpty(selectedText);
+        if (_copiedWholeLine)
+        {
+            selectedText = GetCurrentLineClipboardText(document);
+        }
+
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            return;
+        }
+
+        await Clipboard.SetTextAsync(selectedText);
+        UpdateWindowState("Texto copiado");
+    }
+
+    private async Task CutSelectionAsync()
+    {
+        var document = EditorTextBox.Document;
+        if (Clipboard is null || document is null)
+        {
+            return;
+        }
+
+        var selectionStart = EditorTextBox.SelectionStart;
+        var selectionLength = EditorTextBox.SelectionLength;
+        if (selectionLength > 0)
+        {
+            _copiedWholeLine = false;
+            var selectedText = EditorTextBox.SelectedText;
+            if (string.IsNullOrEmpty(selectedText))
+            {
+                return;
+            }
+
+            await Clipboard.SetTextAsync(selectedText);
+            document.Remove(selectionStart, selectionLength);
+            EditorTextBox.CaretOffset = selectionStart;
+            EditorTextBox.Focus();
+            UpdateWindowState("Texto cortado");
+            return;
+        }
+
+        var lineRange = GetCurrentLineRangeForCut(document);
+        if (lineRange.Length <= 0)
+        {
+            return;
+        }
+
+        _copiedWholeLine = true;
+        var lineText = document.GetText(lineRange.Start, lineRange.Length);
+        if (string.IsNullOrEmpty(lineText))
+        {
+            return;
+        }
+
+        await Clipboard.SetTextAsync(lineText);
+        document.Remove(lineRange.Start, lineRange.Length);
+        EditorTextBox.CaretOffset = Math.Clamp(lineRange.Start, 0, document.TextLength);
+        EditorTextBox.Focus();
+        UpdateWindowState("Texto cortado");
+    }
+
+    private async Task PasteClipboardAsync()
+    {
+        if (Clipboard is null || EditorTextBox.Document is null)
+        {
+            return;
+        }
+
+#pragma warning disable CS0618
+        var text = await Clipboard.GetTextAsync();
+#pragma warning restore CS0618
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        if (_copiedWholeLine && EditorTextBox.SelectionLength == 0 && HasAnyLineEnding(text))
+        {
+            PasteWholeLineBelow(text);
+            UpdateWindowState("Linea pegada");
+            return;
+        }
+
+        ReplaceSelection(text);
+        UpdateWindowState("Texto pegado");
+    }
+
+    private void ReplaceSelection(string text)
+    {
+        var document = EditorTextBox.Document;
+        if (document is null)
+        {
+            return;
+        }
+
+        var selectionStart = EditorTextBox.SelectionStart;
+        var selectionLength = EditorTextBox.SelectionLength;
+        if (selectionLength > 0)
+        {
+            document.Remove(selectionStart, selectionLength);
+        }
+
+        document.Insert(selectionStart, text);
+        EditorTextBox.CaretOffset = Math.Min(selectionStart + text.Length, document.TextLength);
+        EditorTextBox.Focus();
+    }
+
+    private void DuplicateCurrentLine()
+    {
+        var document = EditorTextBox.Document;
+        if (document is null || document.LineCount == 0)
+        {
+            return;
+        }
+
+        var selectionStart = EditorTextBox.SelectionStart;
+        var selectionLength = EditorTextBox.SelectionLength;
+        if (selectionLength > 0)
+        {
+            var selectedText = document.GetText(selectionStart, selectionLength);
+            if (selectedText.Length == 0)
+            {
+                return;
+            }
+
+            document.Insert(selectionStart + selectionLength, selectedText);
+            EditorTextBox.Select(selectionStart + selectionLength, selectedText.Length);
+            EditorTextBox.CaretOffset = selectionStart + selectionLength + selectedText.Length;
+            EditorTextBox.Focus();
+            UpdateWindowState("Seleccion duplicada");
+            return;
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var payload = BuildDuplicateLinePayload(document);
+        if (payload.Text.Length == 0)
+        {
+            return;
+        }
+
+        document.Insert(payload.InsertOffset, payload.Text);
+        EditorTextBox.CaretOffset = Math.Clamp(caretOffset + payload.Text.Length, 0, document.TextLength);
+        EditorTextBox.ScrollToLine(Math.Min(document.GetLineByOffset(EditorTextBox.CaretOffset).LineNumber, document.LineCount));
+        EditorTextBox.Focus();
+        UpdateWindowState("Linea duplicada");
+    }
+
+    private string GetCurrentLineClipboardText(TextDocument document)
+    {
+        if (document.LineCount == 0)
+        {
+            return string.Empty;
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(caretOffset);
+        var delimiterLength = GetTrailingDelimiterLength(document, line.EndOffset);
+        if (delimiterLength > 0)
+        {
+            return document.GetText(line.Offset, line.Length + delimiterLength);
+        }
+
+        var lineText = document.GetText(line.Offset, line.Length);
+        return lineText + DetectDocumentNewLine(document);
+    }
+
+    private (string Text, int InsertOffset) BuildDuplicateLinePayload(TextDocument document)
+    {
+        if (document.LineCount == 0)
+        {
+            return (string.Empty, 0);
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(caretOffset);
+        var delimiterLength = GetTrailingDelimiterLength(document, line.EndOffset);
+        if (delimiterLength > 0)
+        {
+            var text = document.GetText(line.Offset, line.Length + delimiterLength);
+            return (text, line.Offset + line.Length + delimiterLength);
+        }
+
+        var lineText = document.GetText(line.Offset, line.Length);
+        return (DetectDocumentNewLine(document) + lineText, line.EndOffset);
+    }
+
+    private (int Start, int Length) GetCurrentLineRangeForCut(TextDocument document)
+    {
+        if (document.LineCount == 0)
+        {
+            return (0, 0);
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(caretOffset);
+        var delimiterLength = GetTrailingDelimiterLength(document, line.EndOffset);
+        if (delimiterLength > 0)
+        {
+            return (line.Offset, line.Length + delimiterLength);
+        }
+
+        var leadingDelimiterLength = GetLeadingDelimiterLength(document, line.Offset);
+        if (leadingDelimiterLength > 0)
+        {
+            return (line.Offset - leadingDelimiterLength, line.Length + leadingDelimiterLength);
+        }
+
+        return (line.Offset, line.Length);
+    }
+
+    private static int GetTrailingDelimiterLength(TextDocument document, int lineEndOffset)
+    {
+        if (lineEndOffset >= document.TextLength)
+        {
+            return 0;
+        }
+
+        var next = document.GetCharAt(lineEndOffset);
+        if (next == '\r')
+        {
+            return lineEndOffset + 1 < document.TextLength && document.GetCharAt(lineEndOffset + 1) == '\n' ? 2 : 1;
+        }
+
+        return next == '\n' ? 1 : 0;
+    }
+
+    private static int GetLeadingDelimiterLength(TextDocument document, int lineOffset)
+    {
+        if (lineOffset <= 0)
+        {
+            return 0;
+        }
+
+        var previous = document.GetCharAt(lineOffset - 1);
+        if (previous == '\n')
+        {
+            return lineOffset >= 2 && document.GetCharAt(lineOffset - 2) == '\r' ? 2 : 1;
+        }
+
+        return previous == '\r' ? 1 : 0;
+    }
+
+    private void PasteWholeLineBelow(string text)
+    {
+        var document = EditorTextBox.Document;
+        if (document is null || document.LineCount == 0)
+        {
+            return;
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(caretOffset);
+        var trailingDelimiterLength = GetTrailingDelimiterLength(document, line.EndOffset);
+        if (trailingDelimiterLength > 0)
+        {
+            var insertOffset = line.EndOffset + trailingDelimiterLength;
+            document.Insert(insertOffset, text);
+            EditorTextBox.CaretOffset = Math.Clamp(insertOffset + text.Length, 0, document.TextLength);
+            EditorTextBox.Focus();
+            return;
+        }
+
+        // Ultima linea sin salto final: inserta una nueva linea y luego el contenido pegado sin su EOL final.
+        var normalized = RemoveFinalLineEnding(text);
+        var prefix = DetectDocumentNewLine(document);
+        var payload = prefix + normalized;
+        document.Insert(line.EndOffset, payload);
+        EditorTextBox.CaretOffset = Math.Clamp(line.EndOffset + payload.Length, 0, document.TextLength);
+        EditorTextBox.Focus();
+    }
+
+    private static bool HasAnyLineEnding(string text) =>
+        text.Contains('\n') || text.Contains('\r');
+
+    private static string RemoveFinalLineEnding(string text)
+    {
+        if (text.EndsWith("\r\n", StringComparison.Ordinal))
+        {
+            return text[..^2];
+        }
+
+        if (text.EndsWith('\n') || text.EndsWith('\r'))
+        {
+            return text[..^1];
+        }
+
+        return text;
+    }
+
+    private static string DetectDocumentNewLine(TextDocument document)
+    {
+        var text = document.Text;
+        if (text.Contains("\r\n", StringComparison.Ordinal))
+        {
+            return "\r\n";
+        }
+
+        if (text.Contains('\n'))
+        {
+            return "\n";
+        }
+
+        if (text.Contains('\r'))
+        {
+            return "\r";
+        }
+
+        return Environment.NewLine;
     }
 
     private int GetSafeCaretOffset(TextDocument document)

@@ -73,6 +73,27 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Margin" Value="14,12,14,8" />
     </Style>
+
+    <Style Selector="Button.context-menu-item">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Button.context-menu-item:pointerover">
+      <Setter Property="Background" Value="{StaticResource ButtonHoverBackground}" />
+    </Style>
+
+    <Style Selector="Button.context-menu-item:focus">
+      <Setter Property="Background" Value="{StaticResource ButtonHoverBackground}" />
+      <Setter Property="BorderBrush" Value="{StaticResource ButtonHoverBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
   </Window.Styles>
 
   <LayoutTransformControl x:Name="AppScaleHost">
@@ -91,6 +112,11 @@
               <MenuItem Header="Cerrar archivo" Click="CloseFile_Click" />
             </MenuItem>
             <MenuItem Header="Editar">
+              <MenuItem Header="Copiar (Ctrl+C)" Click="Copy_Click" />
+              <MenuItem Header="Cortar (Ctrl+X)" Click="Cut_Click" />
+              <MenuItem Header="Pegar (Ctrl+V)" Click="Paste_Click" />
+              <MenuItem Header="Duplicar línea (Ctrl+D)" Click="DuplicateLine_Click" />
+              <Separator />
               <MenuItem Header="Seleccionar todo" Click="SelectAll_Click" />
               <MenuItem Header="Formatear documento (Ctrl+Sift+F)" Click="FormatDocument_Click" />
               <MenuItem Header="Limpiar salida" Click="ClearOutput_Click" />
@@ -132,7 +158,7 @@
     </Border>
 
     <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrushMuted}" BorderThickness="0,0,1,0">
-      <Grid RowDefinitions="Auto,Auto,*">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
         <TextBlock Classes="panel-title" Text="EXPLORADOR" />
         <StackPanel Grid.Row="1" Margin="14,0,14,12" Spacing="8">
           <Button Classes="command" Click="NewFile_Click" Content="Nuevo algoritmo" HorizontalAlignment="Stretch" />
@@ -144,6 +170,45 @@
           <ScrollViewer>
             <StackPanel x:Name="OpenFilesPanel" Margin="8" Spacing="6" />
           </ScrollViewer>
+        </Border>
+
+        <Border x:Name="MouseClickDiagnosticsPanel"
+                Grid.Row="3"
+                Margin="14,0,14,12"
+                Padding="8"
+                Background="{StaticResource InsetBackground}"
+                BorderBrush="{StaticResource BorderBrushMuted}"
+                BorderThickness="1"
+                CornerRadius="4"
+                IsVisible="False">
+          <Grid RowDefinitions="Auto,*" RowSpacing="6">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <TextBlock Text="DIAGNOSTICO MOUSE" Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <Button Grid.Column="1"
+                      Classes="command"
+                      Click="CopyDiagnostics_Click"
+                      Content="Copiar reporte"
+                      Padding="8,4" />
+              <Button Grid.Column="2"
+                      Classes="command"
+                      Click="ClearDiagnostics_Click"
+                      Content="Limpiar"
+                      Padding="8,4" />
+            </Grid>
+            <TextBox x:Name="MouseClickDiagnosticsTextBox"
+                     Grid.Row="1"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MinHeight="90"
+                     MaxHeight="170"
+                     Background="{StaticResource EditorBackground}"
+                     Foreground="{StaticResource TextPrimary}"
+                     BorderBrush="{StaticResource BorderBrushMuted}"
+                     BorderThickness="1"
+                     FontFamily="Cascadia Code,Consolas,monospace"
+                     FontSize="12" />
+          </Grid>
         </Border>
       </Grid>
     </Border>
@@ -396,6 +461,35 @@
           </StackPanel>
         </Grid>
       </Border>
+
+      <Canvas x:Name="EditorContextMenuOverlay"
+              Grid.Row="1"
+              Grid.RowSpan="3"
+              Background="Transparent"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch"
+              IsVisible="False"
+              ZIndex="30"
+              PointerPressed="EditorContextMenuOverlay_PointerPressed">
+        <Border x:Name="EditorContextMenuPopup"
+                IsVisible="False"
+                MinWidth="220"
+                Background="{StaticResource PanelBackground}"
+                BorderBrush="{StaticResource ButtonBorder}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="6">
+          <StackPanel Spacing="2"
+                      HorizontalAlignment="Stretch">
+            <Button x:Name="EditorContextMenuFirstItem" Classes="context-menu-item" Click="Copy_Click" Content="Copiar (Ctrl+C)" />
+            <Button x:Name="EditorContextMenuCutItem" Classes="context-menu-item" Click="Cut_Click" Content="Cortar (Ctrl+X)" />
+            <Button x:Name="EditorContextMenuPasteItem" Classes="context-menu-item" Click="Paste_Click" Content="Pegar (Ctrl+V)" />
+            <Button x:Name="EditorContextMenuDuplicateItem" Classes="context-menu-item" Click="DuplicateLine_Click" Content="Duplicar linea (Ctrl+D)" />
+            <Border Height="1" Margin="4,4" Background="{StaticResource BorderBrushMuted}" />
+            <Button x:Name="EditorContextMenuFormatItem" Classes="context-menu-item" Click="FormatDocument_Click" Content="Formatear documento (Ctrl+Shift+F)" />
+          </StackPanel>
+        </Border>
+      </Canvas>
     </Grid>
 
     <GridSplitter Grid.Row="1"

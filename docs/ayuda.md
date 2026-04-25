@@ -10,6 +10,7 @@ PseudoCode es una app educativa para escribir, ejecutar y aprender pseudocodigo 
 - [Ejecucion](#ejecucion)
 - [Pseudolenguaje](#pseudolenguaje)
 - [Configuracion](#configuracion)
+- [Solucion de problemas](#solucion-de-problemas)
 - [Mas documentacion](#mas-documentacion)
 
 ## Primeros pasos
@@ -74,10 +75,27 @@ Desde la app tambien puedes usar el menu **Configuracion**:
 
 En los editores JSON usa **Guardar y aplicar** para cambiar el dialecto o tema activo sin reiniciar. Al aplicar un dialecto tambien se actualizan las plantillas, el autocompletado, la validacion y el panel de ayuda.
 
+## Solucion de problemas
+
+Si ejecutas PseudoCode dentro de un contenedor en Linux y quieres mostrar la ventana en tu sistema anfitrion Linux, primero habilita conexiones locales a X11 desde el host:
+
+```bash
+xhost +local:
+```
+
+Luego, dentro del contenedor, exporta `DISPLAY` antes de abrir la app:
+
+```bash
+export DISPLAY=:0
+dotnet run --project src/PseudoCode.App
+```
+
+Si la app abre pero notas problemas con integraciones del host Linux como la interfaz grafica o el portapapeles, revisa tambien la configuracion de X11 o Wayland de tu contenedor. Para mas detalle tecnico, abre [Desarrollo](desarrollo.md).
+
 ## Mas documentacion
 
 - [Configuracion JSON](configuracion-json.md)
 - [Pseudolenguaje](pseudolenguaje.md)
-- docs/desarrollo.md
-- docs/publicacion.md
-- CHANGELOG.md
+- [Desarrollo](desarrollo.md)
+- [Publicacion](publicacion.md)
+- [Notas de version](../CHANGELOG.md)

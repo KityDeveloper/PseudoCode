@@ -9,8 +9,18 @@ internal sealed record RuntimeSettings(
     SyntaxTheme LightSyntaxTheme,
     double EditorFontSize,
     double InterfaceScale,
+    DiagnosticRuntimeSettings Diagnostic,
     IReadOnlyList<string> Diagnostics,
     string UserSettingsPath);
+
+internal sealed record DiagnosticRuntimeSettings(
+    bool Enabled,
+    DiagnosticFeatureRuntimeSettings Features);
+
+internal sealed record DiagnosticFeatureRuntimeSettings(
+    bool Clicks,
+    bool Keystrokes,
+    bool MousePosition);
 
 internal sealed record JsonConfigTarget(string Title, string RelativePath, string FullPath, string Template);
 
@@ -52,8 +62,9 @@ internal static class AppSettingsService
         var light = LoadSyntaxTheme(settings.Editor.SyntaxThemeLight, baseSettingsPath, userSettingsPath, SyntaxTheme.CreateLight(), diagnostics);
         var editorFontSize = NormalizeEditorFontSize(settings.Editor.FontSize, diagnostics);
         var interfaceScale = NormalizeInterfaceScale(settings.Editor.InterfaceScale, diagnostics);
+        var diagnostic = BuildDiagnosticSettings(settings);
 
-        return new RuntimeSettings(language, dark, light, editorFontSize, interfaceScale, diagnostics, userSettingsPath);
+        return new RuntimeSettings(language, dark, light, editorFontSize, interfaceScale, diagnostic, diagnostics, userSettingsPath);
     }
 
     public static IReadOnlyList<JsonConfigTarget> GetConfigTargets(RuntimeSettings settings) =>
@@ -364,6 +375,23 @@ internal static class AppSettingsService
         return normalized;
     }
 
+    private static DiagnosticRuntimeSettings BuildDiagnosticSettings(AppSettingsDto settings)
+    {
+        var legacyMouseClicks = settings.Editor.MouseClickDiagnostics;
+        var diagnostic = settings.Diagnostic ?? new DiagnosticSettingsDto();
+        var features = diagnostic.Features ?? new DiagnosticFeatureSettingsDto();
+        var mouseClicks = diagnostic.MouseClicks ?? new MouseClickDiagnosticSettingsDto();
+        var clicksEnabled = features.Clicks || mouseClicks.Enabled || legacyMouseClicks;
+        var mousePositionEnabled = features.MousePosition || mouseClicks.ShowPosition;
+        var diagnosticEnabled = diagnostic.Enabled || legacyMouseClicks;
+        return new DiagnosticRuntimeSettings(
+            diagnosticEnabled,
+            new DiagnosticFeatureRuntimeSettings(
+                clicksEnabled,
+                features.Keystrokes,
+                mousePositionEnabled));
+    }
+
     private static string GetUserSettingsPath()
     {
         if (OperatingSystem.IsWindows())
@@ -392,6 +420,14 @@ internal static class AppSettingsService
         "interfaceScale": 1,
         "syntaxThemeDark": "custom-dark",
         "syntaxThemeLight": "light"
+      },
+      "diagnostic": {
+        "enabled": false,
+        "features": {
+          "clicks": false,
+          "keystrokes": false,
+          "mousePosition": true
+        }
       }
     }
     """;
@@ -715,6 +751,9 @@ internal sealed class AppSettingsDto
     [JsonPropertyName("editor")]
     public EditorSettingsDto Editor { get; set; } = new();
 
+    [JsonPropertyName("diagnostic")]
+    public DiagnosticSettingsDto Diagnostic { get; set; } = new();
+
     public static AppSettingsDto CreateDefault() => new();
 }
 
@@ -737,4 +776,49 @@ internal sealed class EditorSettingsDto
 
     [JsonPropertyName("syntaxThemeLight")]
     public string SyntaxThemeLight { get; set; } = SyntaxTheme.DefaultLightId;
+
+    [JsonPropertyName("mouseClickDiagnostics")]
+    public bool MouseClickDiagnostics { get; set; }
+}
+
+internal sealed class DiagnosticSettingsDto
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("features")]
+    public DiagnosticFeatureSettingsDto Features { get; set; } = new();
+
+    [JsonPropertyName("mouseClicks")]
+    public MouseClickDiagnosticSettingsDto MouseClicks { get; set; } = new();
+}
+
+internal sealed class DiagnosticFeatureSettingsDto
+{
+    [JsonPropertyName("clicks")]
+    public bool Clicks { get; set; }
+
+    [JsonPropertyName("keystrokes")]
+    public bool Keystrokes { get; set; }
+
+    [JsonPropertyName("mousePosition")]
+    public bool MousePosition { get; set; } = true;
+}
+
+internal sealed class MouseClickDiagnosticSettingsDto
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("showTimestamp")]
+    public bool ShowTimestamp { get; set; } = true;
+
+    [JsonPropertyName("showButton")]
+    public bool ShowButton { get; set; } = true;
+
+    [JsonPropertyName("showPosition")]
+    public bool ShowPosition { get; set; } = true;
+
+    [JsonPropertyName("showTarget")]
+    public bool ShowTarget { get; set; } = true;
 }
