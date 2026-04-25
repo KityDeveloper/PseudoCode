@@ -540,6 +540,12 @@ public partial class MainWindow : Window
         DuplicateCurrentLine();
     }
 
+    private void ToggleComment_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseCustomEditorContextMenuAfterAction();
+        ToggleLineComments();
+    }
+
     private void FormatDocument_Click(object? sender, RoutedEventArgs e)
     {
         CloseCustomEditorContextMenuAfterAction();
@@ -3199,6 +3205,7 @@ public partial class MainWindow : Window
         yield return EditorContextMenuCutItem;
         yield return EditorContextMenuPasteItem;
         yield return EditorContextMenuDuplicateItem;
+        yield return EditorContextMenuToggleCommentItem;
         yield return EditorContextMenuFormatItem;
     }
 
@@ -3238,6 +3245,12 @@ public partial class MainWindow : Window
         if (ReferenceEquals(item, EditorContextMenuDuplicateItem))
         {
             DuplicateLine_Click(item, new RoutedEventArgs());
+            return;
+        }
+
+        if (ReferenceEquals(item, EditorContextMenuToggleCommentItem))
+        {
+            ToggleComment_Click(item, new RoutedEventArgs());
             return;
         }
 
@@ -3472,6 +3485,13 @@ public partial class MainWindow : Window
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Alt))
         {
+            if (IsToggleCommentShortcut(e))
+            {
+                ToggleLineComments();
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.L)
             {
                 e.Handled = true;
@@ -3743,6 +3763,18 @@ public partial class MainWindow : Window
         return e.Key == Key.G
             && e.KeyModifiers.HasFlag(KeyModifiers.Control)
             && !e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+    }
+
+    private static bool IsToggleCommentShortcut(KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            return false;
+        }
+
+        var key = e.Key.ToString();
+        var keySymbol = e.KeySymbol ?? string.Empty;
+        return key is "Oem2" or "Divide" || keySymbol == "/";
     }
 
     private bool TryHandleFormatShortcut(KeyEventArgs e)
@@ -4192,6 +4224,115 @@ public partial class MainWindow : Window
         EditorTextBox.ScrollToLine(Math.Min(document.GetLineByOffset(EditorTextBox.CaretOffset).LineNumber, document.LineCount));
         EditorTextBox.Focus();
         UpdateWindowState("Linea duplicada");
+    }
+
+    private void ToggleLineComments()
+    {
+        var document = EditorTextBox.Document;
+        if (document is null || document.LineCount == 0)
+        {
+            return;
+        }
+
+        var (startLine, endLine) = GetSelectedLineRange(document);
+        if (startLine <= 0 || endLine <= 0)
+        {
+            return;
+        }
+
+        var allCommented = true;
+        for (var lineNumber = startLine; lineNumber <= endLine; lineNumber++)
+        {
+            var line = document.GetLineByNumber(lineNumber);
+            var text = document.GetText(line.Offset, line.Length);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var firstNonWhitespace = GetFirstNonWhitespaceIndex(text);
+            if (firstNonWhitespace < 0 || !text[firstNonWhitespace..].StartsWith("//", StringComparison.Ordinal))
+            {
+                allCommented = false;
+                break;
+            }
+        }
+
+        for (var lineNumber = endLine; lineNumber >= startLine; lineNumber--)
+        {
+            var line = document.GetLineByNumber(lineNumber);
+            var text = document.GetText(line.Offset, line.Length);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var firstNonWhitespace = GetFirstNonWhitespaceIndex(text);
+            if (firstNonWhitespace < 0)
+            {
+                continue;
+            }
+
+            var insertOffset = line.Offset + firstNonWhitespace;
+            if (allCommented)
+            {
+                if (text[firstNonWhitespace..].StartsWith("//", StringComparison.Ordinal))
+                {
+                    document.Remove(insertOffset, 2);
+                }
+            }
+            else
+            {
+                document.Insert(insertOffset, "//");
+            }
+        }
+
+        var targetLine = Math.Clamp(startLine, 1, document.LineCount);
+        var targetDocumentLine = document.GetLineByNumber(targetLine);
+        EditorTextBox.Select(targetDocumentLine.Offset, 0);
+        EditorTextBox.CaretOffset = targetDocumentLine.Offset;
+        EditorTextBox.ScrollToLine(targetLine);
+        EditorTextBox.Focus();
+        UpdateWindowState(allCommented ? "Lineas descomentadas" : "Lineas comentadas");
+    }
+
+    private (int StartLine, int EndLine) GetSelectedLineRange(TextDocument document)
+    {
+        if (document.LineCount == 0)
+        {
+            return (0, 0);
+        }
+
+        if (EditorTextBox.SelectionLength <= 0)
+        {
+            var lineNumber = document.GetLineByOffset(GetSafeCaretOffset(document)).LineNumber;
+            return (lineNumber, lineNumber);
+        }
+
+        var selectionStart = Math.Clamp(EditorTextBox.SelectionStart, 0, document.TextLength);
+        var selectionEnd = Math.Clamp(selectionStart + EditorTextBox.SelectionLength, 0, document.TextLength);
+        var startLine = document.GetLineByOffset(selectionStart).LineNumber;
+        var endOffset = selectionEnd;
+        if (selectionEnd > selectionStart && selectionEnd > 0)
+        {
+            endOffset = selectionEnd - 1;
+        }
+
+        var endLine = document.GetLineByOffset(Math.Clamp(endOffset, 0, document.TextLength)).LineNumber;
+        return (startLine, endLine);
+    }
+
+    private static int GetFirstNonWhitespaceIndex(string text)
+    {
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (!char.IsWhiteSpace(text[index]))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private string GetCurrentLineClipboardText(TextDocument document)

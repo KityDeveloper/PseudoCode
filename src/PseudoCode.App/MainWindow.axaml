@@ -116,6 +116,7 @@
               <MenuItem Header="Cortar (Ctrl+X)" Click="Cut_Click" />
               <MenuItem Header="Pegar (Ctrl+V)" Click="Paste_Click" />
               <MenuItem Header="Duplicar línea (Ctrl+D)" Click="DuplicateLine_Click" />
+              <MenuItem Header="Comentar o descomentar (Ctrl+/)" Click="ToggleComment_Click" />
               <Separator />
               <MenuItem Header="Seleccionar todo" Click="SelectAll_Click" />
               <MenuItem Header="Formatear documento (Ctrl+Sift+F)" Click="FormatDocument_Click" />
@@ -485,6 +486,7 @@
             <Button x:Name="EditorContextMenuCutItem" Classes="context-menu-item" Click="Cut_Click" Content="Cortar (Ctrl+X)" />
             <Button x:Name="EditorContextMenuPasteItem" Classes="context-menu-item" Click="Paste_Click" Content="Pegar (Ctrl+V)" />
             <Button x:Name="EditorContextMenuDuplicateItem" Classes="context-menu-item" Click="DuplicateLine_Click" Content="Duplicar linea (Ctrl+D)" />
+            <Button x:Name="EditorContextMenuToggleCommentItem" Classes="context-menu-item" Click="ToggleComment_Click" Content="Comentar o descomentar (Ctrl+/)" />
             <Border Height="1" Margin="4,4" Background="{StaticResource BorderBrushMuted}" />
             <Button x:Name="EditorContextMenuFormatItem" Classes="context-menu-item" Click="FormatDocument_Click" Content="Formatear documento (Ctrl+Shift+F)" />
           </StackPanel>
