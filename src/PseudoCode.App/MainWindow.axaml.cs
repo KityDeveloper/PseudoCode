@@ -338,16 +338,28 @@ public partial class MainWindow : Window
 
     private void StopExecution_Click(object? sender, RoutedEventArgs e)
     {
-        if (!_isRunningCode)
+        if (_isRunningCode)
         {
+            _executionPauseGate.Set();
+            _executionCancellation?.Cancel();
+            _isExecutionPaused = false;
+            UpdateExecutionControls();
+            UpdateWindowState("Deteniendo ejecucion...");
             return;
         }
 
-        _executionPauseGate.Set();
-        _executionCancellation?.Cancel();
-        _isExecutionPaused = false;
-        UpdateExecutionControls();
-        UpdateWindowState("Deteniendo ejecucion...");
+        if (_currentDocument?.IsDebugging == true)
+        {
+            StopDebug(_currentDocument);
+            UpdateExecutionControls();
+            UpdateWindowState("Depuracion detenida");
+            return;
+        }
+
+        if (_currentDocument is null)
+        {
+            return;
+        }
     }
 
     private void StartDebug_Click(object? sender, RoutedEventArgs e)
@@ -2935,7 +2947,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (document.Diagnostics.Count > 0)
+        {
+            document.IsDebugging = false;
+            document.DebugLine = null;
+            HighlightDebugLine(null);
+            _showDiagnostics = true;
+            UpdateDiagnosticUnderlines();
+            UpdateOutputPanelView();
+            UpdateExecutionControls();
+            UpdateWindowState("No se puede depurar mientras existan errores");
+            return;
+        }
+
         document.IsDebugging = true;
+        UpdateExecutionControls();
         var step = document.Interpreter.StartDebug(document.Text);
         ApplyDebugStepResult(document, step);
         if (step.Execution.Diagnostics.Count > 0)
@@ -2944,10 +2970,12 @@ public partial class MainWindow : Window
             _showDiagnostics = true;
             HighlightDebugLine(null);
             UpdateOutputPanelView();
+            UpdateExecutionControls();
             UpdateWindowState("No se inicio depuracion: hay errores");
             return;
         }
 
+        UpdateExecutionControls();
         UpdateWindowState("Depuracion iniciada - F10 para avanzar");
     }
 
@@ -2974,6 +3002,7 @@ public partial class MainWindow : Window
         document.DebugLine = step.CurrentLine;
         ShowExecutionResult(step.Execution);
         HighlightDebugLine(document.DebugLine);
+        UpdateExecutionControls();
 
         if (step.Execution.WaitingForInput)
         {
@@ -2989,6 +3018,8 @@ public partial class MainWindow : Window
         document.IsDebugging = false;
         document.DebugLine = null;
         HighlightDebugLine(null);
+        HideConsoleInput();
+        UpdateExecutionControls();
     }
 
     private void HighlightDebugLine(int? lineNumber)
@@ -4563,10 +4594,12 @@ public partial class MainWindow : Window
 
     private void UpdateExecutionControls()
     {
-        RunExecutionButton.IsEnabled = !_isRunningCode && _currentDocument is not null;
+        var isDebugging = _currentDocument?.IsDebugging == true;
+        RunExecutionButton.IsEnabled = !_isRunningCode && !isDebugging && _currentDocument is not null;
         PauseExecutionButton.IsEnabled = _isRunningCode;
-        StopExecutionButton.IsEnabled = _isRunningCode;
-        TopExecutionControls.IsVisible = _isRunningCode;
+        StopExecutionButton.IsEnabled = _isRunningCode || isDebugging;
+        TopExecutionControls.IsVisible = _isRunningCode || isDebugging;
+        TopPauseExecutionButton.IsVisible = _isRunningCode;
 
         var pauseText = _isExecutionPaused ? "▶ Continuar" : "Ⅱ Pausa";
         PauseExecutionButton.Content = pauseText;
