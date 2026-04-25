@@ -1,5 +1,18 @@
 # Notas de version
 
+## 1.1.4 - 2026-04-25
+
+Version estable enfocada en pulir el editor, la depuracion y las validaciones del pseudocodigo.
+
+### Cambios principales
+
+- Menu contextual del editor ampliado con copiar, cortar, pegar, duplicar linea y comentar o descomentar.
+- Atajos del editor mejorados, incluyendo `Ctrl + D`, `Ctrl + /` y `Ctrl + L`.
+- El validador ahora detecta variables redeclaradas y asignaciones incompatibles con el tipo declarado.
+- La depuracion paso a paso ya no inicia si el codigo tiene errores y `Stop` tambien funciona durante debug.
+- La ventana Acerca de muestra la version limpia, sin metadata de build al final.
+- Version del proyecto actualizada a `1.1.4`.
+
 ## 1.1.3 - 2026-04-19
 
 Version estable enfocada en atajos de guardado, validacion de variables y cierre seguro de la app.
