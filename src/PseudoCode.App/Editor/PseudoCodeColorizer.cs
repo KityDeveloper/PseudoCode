@@ -67,9 +67,9 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
 
         ApplyMatches(line, text, _keyword, _palette.KeywordBrush, codeLength);
         ApplyMatches(line, text, _typeName, _palette.TypeBrush, codeLength);
-        ApplyMatches(line, text, StringLiteral, _palette.StringBrush, codeLength);
         ApplyMatches(line, text, NumberLiteral, _palette.NumberBrush, codeLength);
         ApplyMatches(line, text, Operator, _palette.OperatorBrush, codeLength);
+        ApplyMatches(line, text, StringLiteral, _palette.StringBrush, codeLength);
 
         if (commentIndex >= 0)
         {

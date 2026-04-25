@@ -10,6 +10,7 @@ public sealed class PseudoInterpreter
     private static readonly Regex Identifier = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declaredVariables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _declaredVariableTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
     private readonly List<string> _diagnostics = [];
     private string[] _lines = [];
@@ -21,6 +22,7 @@ public sealed class PseudoInterpreter
     {
         _variables.Clear();
         _declaredVariables.Clear();
+        _declaredVariableTypes.Clear();
         _output.Clear();
         _diagnostics.Clear();
         _pendingInputVariables.Clear();
@@ -39,7 +41,10 @@ public sealed class PseudoInterpreter
             return BuildResult();
         }
 
-        _variables[_waitingInputVariable] = ParseInput(input);
+        if (TryConvertValueForVariable(_waitingInputVariable, ParseInput(input), 1, out var converted))
+        {
+            _variables[_waitingInputVariable] = converted;
+        }
         _output.Add($"> {input}");
         _waitingInputVariable = null;
         return RunUntilBlocked();
@@ -121,6 +126,7 @@ public sealed class PseudoInterpreter
         var declaration = line["Definir ".Length..];
         var separator = declaration.IndexOf(" Como ", StringComparison.OrdinalIgnoreCase);
         var names = separator >= 0 ? declaration[..separator] : declaration;
+        var typeName = separator >= 0 ? declaration[(separator + " Como ".Length)..].Trim() : "Real";
 
         foreach (var rawName in names.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -136,7 +142,8 @@ public sealed class PseudoInterpreter
                 continue;
             }
 
-            _variables.TryAdd(rawName, 0d);
+            _declaredVariableTypes[rawName] = typeName;
+            _variables.TryAdd(rawName, CreateDefaultValueForType(typeName));
         }
     }
 
@@ -153,7 +160,11 @@ public sealed class PseudoInterpreter
             return;
         }
 
-        _variables[name] = Evaluate(expression, lineNumber);
+        var evaluated = Evaluate(expression, lineNumber);
+        if (TryConvertValueForVariable(name, evaluated, lineNumber, out var converted))
+        {
+            _variables[name] = converted;
+        }
     }
 
     private void Write(string expressionList, int lineNumber)
@@ -297,6 +308,120 @@ public sealed class PseudoInterpreter
         _diagnostics.Add($"Linea {lineNumber}: la variable '{name}' no esta declarada. Causa: se usa antes de Definir. Solucion: agrega 'Definir {name} Como Real' antes de usarla.");
         return false;
     }
+
+    private bool TryConvertValueForVariable(string variableName, object? value, int lineNumber, out object? converted)
+    {
+        converted = value;
+        if (!_declaredVariableTypes.TryGetValue(variableName, out var typeName))
+        {
+            return true;
+        }
+
+        return TryConvertValueForType(typeName, value, lineNumber, out converted);
+    }
+
+    private bool TryConvertValueForType(string typeName, object? value, int lineNumber, out object? converted)
+    {
+        converted = value;
+        if (IsIntegerType(typeName))
+        {
+            if (TryGetNumber(value, out var integerNumber) && Math.Abs(integerNumber % 1) < 0.0000001)
+            {
+                converted = integerNumber;
+                return true;
+            }
+
+            _diagnostics.Add($"Linea {lineNumber}: no se puede asignar un valor no entero a una variable de tipo '{typeName}'. Causa: el tipo no coincide. Solucion: usa un numero entero.");
+            return false;
+        }
+
+        if (IsRealType(typeName))
+        {
+            if (TryGetNumber(value, out var realNumber))
+            {
+                converted = realNumber;
+                return true;
+            }
+
+            _diagnostics.Add($"Linea {lineNumber}: no se puede asignar un valor no numerico a una variable de tipo '{typeName}'. Causa: el tipo no coincide. Solucion: usa un numero.");
+            return false;
+        }
+
+        if (IsStringType(typeName))
+        {
+            if (value is string stringValue)
+            {
+                converted = stringValue;
+                return true;
+            }
+
+            _diagnostics.Add($"Linea {lineNumber}: no se puede asignar un valor no textual a una variable de tipo '{typeName}'. Causa: el tipo no coincide. Solucion: usa una cadena entre comillas.");
+            return false;
+        }
+
+        if (IsLogicalType(typeName))
+        {
+            if (value is bool booleanValue)
+            {
+                converted = booleanValue;
+                return true;
+            }
+
+            _diagnostics.Add($"Linea {lineNumber}: no se puede asignar un valor no logico a una variable de tipo '{typeName}'. Causa: el tipo no coincide. Solucion: usa Verdadero o Falso.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static object CreateDefaultValueForType(string typeName)
+    {
+        if (IsStringType(typeName))
+        {
+            return string.Empty;
+        }
+
+        if (IsLogicalType(typeName))
+        {
+            return false;
+        }
+
+        return 0d;
+    }
+
+    private static bool TryGetNumber(object? value, out double number)
+    {
+        switch (value)
+        {
+            case double d:
+                number = d;
+                return true;
+            case int i:
+                number = i;
+                return true;
+            case string text when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedInvariant):
+                number = parsedInvariant;
+                return true;
+            case string text when double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedCurrent):
+                number = parsedCurrent;
+                return true;
+            default:
+                number = 0;
+                return false;
+        }
+    }
+
+    private static bool IsIntegerType(string typeName) =>
+        typeName.Contains("entero", StringComparison.OrdinalIgnoreCase) || typeName.Contains("integer", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRealType(string typeName) =>
+        typeName.Contains("real", StringComparison.OrdinalIgnoreCase) || typeName.Contains("double", StringComparison.OrdinalIgnoreCase) || typeName.Contains("decimal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsStringType(string typeName) =>
+        typeName.Contains("cadena", StringComparison.OrdinalIgnoreCase) || typeName.Contains("string", StringComparison.OrdinalIgnoreCase) || typeName.Contains("texto", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLogicalType(string typeName) =>
+        typeName.Contains("logico", StringComparison.OrdinalIgnoreCase) || typeName.Contains("boolean", StringComparison.OrdinalIgnoreCase);
 
     private static string RemoveComment(string line)
     {

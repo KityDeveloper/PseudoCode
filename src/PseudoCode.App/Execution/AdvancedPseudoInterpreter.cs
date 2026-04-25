@@ -15,6 +15,7 @@ internal sealed class AdvancedPseudoInterpreter
     private readonly PseudoLanguageDefinition _language;
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declaredVariables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _declaredVariableTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _output = [];
     private readonly List<string> _diagnostics = [];
     private readonly List<string> _inputs = [];
@@ -123,6 +124,7 @@ internal sealed class AdvancedPseudoInterpreter
     {
         _variables.Clear();
         _declaredVariables.Clear();
+        _declaredVariableTypes.Clear();
         _output.Clear();
         _diagnostics.Clear();
         _waitingInputVariable = null;
@@ -197,7 +199,10 @@ internal sealed class AdvancedPseudoInterpreter
             index++;
             var declaration = _language.RemoveKeywordPrefix(text, "declare");
             var separator = declaration.IndexOf($" {_language.Keyword("typeSeparator")} ", StringComparison.OrdinalIgnoreCase);
-            return new Declare(line.Number, SplitNames(separator >= 0 ? declaration[..separator] : declaration));
+            var typeName = separator >= 0
+                ? declaration[(separator + _language.Keyword("typeSeparator").Length + 2)..].Trim()
+                : "Real";
+            return new Declare(line.Number, SplitNames(separator >= 0 ? declaration[..separator] : declaration), typeName);
         }
 
         if (_language.StartsWithKeyword(text, "write"))
@@ -363,7 +368,8 @@ internal sealed class AdvancedPseudoInterpreter
                             continue;
                         }
 
-                        _variables.TryAdd(name, 0d);
+                        _declaredVariableTypes[name] = declare.TypeName;
+                        _variables.TryAdd(name, CreateDefaultValueForType(declare.TypeName));
                     }
                     else AddRuntime(node.Line, $"'{name}' no es un nombre valido", "usa caracteres no permitidos", "usa letras, numeros y guion bajo");
                 }
@@ -371,7 +377,14 @@ internal sealed class AdvancedPseudoInterpreter
             case Assign assign:
                 if (!Identifier.IsMatch(assign.Name)) AddRuntime(node.Line, $"'{assign.Name}' no es un destino valido", "el lado izquierdo debe ser variable", "usa 'total <- 10'");
                 else if (!EnsureDeclared(assign.Name, node.Line)) return;
-                else _variables[assign.Name] = EvaluateValue(assign.Expression, node.Line);
+                else
+                {
+                    var evaluated = EvaluateValue(assign.Expression, node.Line);
+                    if (TryConvertValueForVariable(assign.Name, evaluated, node.Line, out var converted))
+                    {
+                        _variables[assign.Name] = converted;
+                    }
+                }
                 return;
             case Write write:
                 WriteOutput(string.Concat(write.Expressions.Select(expression => FormatValue(EvaluateValue(expression, node.Line)))), write.WithoutNewline);
@@ -388,7 +401,10 @@ internal sealed class AdvancedPseudoInterpreter
                         return;
                     }
                     var input = _inputs[_inputIndex++];
-                    _variables[name] = ParseInput(input);
+                    if (TryConvertValueForVariable(name, ParseInput(input), node.Line, out var convertedInput))
+                    {
+                        _variables[name] = convertedInput;
+                    }
                     AddOutput($"> {input}");
                     _outputLineOpen = false;
                 }
@@ -790,6 +806,71 @@ internal sealed class AdvancedPseudoInterpreter
         return false;
     }
 
+    private bool TryConvertValueForVariable(string variableName, object? value, int line, out object? converted)
+    {
+        converted = value;
+        if (!_declaredVariableTypes.TryGetValue(variableName, out var typeName))
+        {
+            return true;
+        }
+
+        return TryConvertValueForType(typeName, value, line, out converted);
+    }
+
+    private bool TryConvertValueForType(string typeName, object? value, int line, out object? converted)
+    {
+        converted = value;
+        if (IsIntegerType(typeName))
+        {
+            if (TryGetNumber(value, out var integerNumber) && Math.Abs(integerNumber % 1) < 0.0000001)
+            {
+                converted = integerNumber;
+                return true;
+            }
+
+            AddRuntime(line, $"no se puede asignar un valor no entero a una variable de tipo '{typeName}'", "el tipo no coincide", "usa un numero entero");
+            return false;
+        }
+
+        if (IsRealType(typeName))
+        {
+            if (TryGetNumber(value, out var realNumber))
+            {
+                converted = realNumber;
+                return true;
+            }
+
+            AddRuntime(line, $"no se puede asignar un valor no numerico a una variable de tipo '{typeName}'", "el tipo no coincide", "usa un numero");
+            return false;
+        }
+
+        if (IsStringType(typeName))
+        {
+            if (value is string stringValue)
+            {
+                converted = stringValue;
+                return true;
+            }
+
+            AddRuntime(line, $"no se puede asignar un valor no textual a una variable de tipo '{typeName}'", "el tipo no coincide", "usa una cadena entre comillas");
+            return false;
+        }
+
+        if (IsLogicalType(typeName))
+        {
+            if (value is bool booleanValue)
+            {
+                converted = booleanValue;
+                return true;
+            }
+
+            AddRuntime(line, $"no se puede asignar un valor no logico a una variable de tipo '{typeName}'", "el tipo no coincide", $"usa {_language.Keyword("true")} o {_language.Keyword("false")}");
+            return false;
+        }
+
+        return true;
+    }
+
     private ExecutionResult BuildResult() => new(
         _diagnostics.Count == 0 && _waitingInputVariable is null && !_stoppedByUser,
         _output.ToArray(),
@@ -887,6 +968,55 @@ internal sealed class AdvancedPseudoInterpreter
         return input;
     }
 
+    private static object CreateDefaultValueForType(string typeName)
+    {
+        if (IsStringType(typeName))
+        {
+            return string.Empty;
+        }
+
+        if (IsLogicalType(typeName))
+        {
+            return false;
+        }
+
+        return 0d;
+    }
+
+    private static bool TryGetNumber(object? value, out double number)
+    {
+        switch (value)
+        {
+            case double d:
+                number = d;
+                return true;
+            case int i:
+                number = i;
+                return true;
+            case string text when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedInvariant):
+                number = parsedInvariant;
+                return true;
+            case string text when double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedCurrent):
+                number = parsedCurrent;
+                return true;
+            default:
+                number = 0;
+                return false;
+        }
+    }
+
+    private static bool IsIntegerType(string typeName) =>
+        typeName.Contains("entero", StringComparison.OrdinalIgnoreCase) || typeName.Contains("integer", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRealType(string typeName) =>
+        typeName.Contains("real", StringComparison.OrdinalIgnoreCase) || typeName.Contains("double", StringComparison.OrdinalIgnoreCase) || typeName.Contains("decimal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsStringType(string typeName) =>
+        typeName.Contains("cadena", StringComparison.OrdinalIgnoreCase) || typeName.Contains("string", StringComparison.OrdinalIgnoreCase) || typeName.Contains("texto", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLogicalType(string typeName) =>
+        typeName.Contains("logico", StringComparison.OrdinalIgnoreCase) || typeName.Contains("boolean", StringComparison.OrdinalIgnoreCase);
+
     private static IReadOnlyList<string> SplitArguments(string text)
     {
         var parts = new List<string>();
@@ -968,7 +1098,7 @@ internal sealed class AdvancedPseudoInterpreter
     private sealed record SourceLine(int Number, string Text);
     private abstract record Node(int Line);
     private sealed record NoOp(int Line) : Node(Line);
-    private sealed record Declare(int Line, IReadOnlyList<string> Names) : Node(Line);
+    private sealed record Declare(int Line, IReadOnlyList<string> Names, string TypeName) : Node(Line);
     private sealed record Assign(int Line, string Name, string Expression) : Node(Line);
     private sealed record Write(int Line, IReadOnlyList<string> Expressions, bool WithoutNewline) : Node(Line);
     private sealed record Read(int Line, IReadOnlyList<string> Names) : Node(Line);
