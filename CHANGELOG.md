@@ -11,6 +11,7 @@ Version estable enfocada en pulir el editor, la depuracion y las validaciones de
 - El validador ahora detecta variables redeclaradas y asignaciones incompatibles con el tipo declarado.
 - La depuracion paso a paso ya no inicia si el codigo tiene errores y `Stop` tambien funciona durante debug.
 - La ventana Acerca de muestra la version limpia, sin metadata de build al final.
+- Proyecto y devcontainers actualizados para `.NET 10`.
 - Version del proyecto actualizada a `1.1.4`.
 
 ## 1.1.3 - 2026-04-19

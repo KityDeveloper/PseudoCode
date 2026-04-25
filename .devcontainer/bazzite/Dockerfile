@@ -1,6 +1,6 @@
 # Dev container image for PseudoCode on Bazzite/Flatpak hosts.
 
-FROM mcr.microsoft.com/devcontainers/dotnet:1-8.0-jammy
+FROM mcr.microsoft.com/devcontainers/dotnet:1-10.0-jammy
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_EnableDiagnostics=0

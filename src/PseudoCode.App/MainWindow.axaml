@@ -558,7 +558,7 @@
 
     <Border Grid.Row="2" Grid.ColumnSpan="5" Background="{StaticResource AccentBlue}">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
-        <TextBlock Text=".NET 8 + Avalonia" Foreground="White" VerticalAlignment="Center" FontSize="12" />
+        <TextBlock Text=".NET 10 + Avalonia" Foreground="White" VerticalAlignment="Center" FontSize="12" />
         <TextBlock Grid.Column="1"
                    x:Name="WindowStateText"
                    Text="Listo"

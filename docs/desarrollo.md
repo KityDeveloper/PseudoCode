@@ -2,7 +2,7 @@
 
 ## Requisitos
 
-- .NET SDK 8
+- .NET SDK 10
 - Linux, Windows o macOS para desarrollo
 
 ## Ejecutar
@@ -54,5 +54,5 @@ sudo dnf install -y libXcursor
 
 El proyecto incluye dos perfiles:
 
-- `PseudoCode Avalonia`: entorno .NET 8 normal.
+- `PseudoCode Avalonia`: entorno .NET 10 normal.
 - `PseudoCode Avalonia - Bazzite`: entorno para Bazzite/Flatpak con montajes de X11/Wayland.

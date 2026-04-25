@@ -1,4 +1,4 @@
-// Dev container for PseudoCode, a .NET 8 + Avalonia desktop app.
+// Dev container for PseudoCode, a .NET 10 + Avalonia desktop app.
 {
 	"name": "PseudoCode Avalonia",
 	"dockerComposeFile": "docker-compose.yml",
@@ -25,7 +25,7 @@
 	"postStartCommand": "sudo chown -R vscode:vscode /home/vscode/.ssh 2>/dev/null || true",
 	"features": {
 		"ghcr.io/devcontainers/features/dotnet:2": {
-			"version": "8.0"
+			"version": "10.0"
 		},
 		"ghcr.io/devcontainers/features/powershell:1": {
 			"version": "latest"
