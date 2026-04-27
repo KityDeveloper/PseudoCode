@@ -1,5 +1,17 @@
 # Notas de version
 
+## 1.1.5 - 2026-04-27
+
+Version estable enfocada en pulir detalles visuales del editor y la salida en vivo.
+
+### Cambios principales
+
+- Fondo activo de bloques `Si` mas visible en modo claro.
+- Guias verticales de `Si` y `FinSi` mejor alineadas con el inicio real del bloque.
+- Intellisense mejorado con sugerencias mas contextuales para `Definir`, `Leer` y `Escribir`, ademas de variables detectadas en el documento actual.
+- La salida en ejecucion ahora hace autoscroll a medida que aparecen nuevas lineas.
+- Version del proyecto actualizada a `1.1.5`.
+
 ## 1.1.4 - 2026-04-25
 
 Version estable enfocada en pulir el editor, la depuracion y las validaciones del pseudocodigo.
