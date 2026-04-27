@@ -3486,6 +3486,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (IsCaretInsideCommentOrString())
+        {
+            _completionWindow?.Close();
+            return;
+        }
+
         if (char.IsLetter(e.Text[0]))
         {
             ShowCompletion();
@@ -3895,6 +3901,12 @@ public partial class MainWindow : Window
 
     private void ShowCompletion(bool force = false)
     {
+        if (IsCaretInsideCommentOrString())
+        {
+            _completionWindow?.Close();
+            return;
+        }
+
         var prefix = GetCurrentWord();
         if (!force && prefix.Length < 2)
         {
@@ -3947,6 +3959,32 @@ public partial class MainWindow : Window
         }
 
         return document.GetText(start, offset - start);
+    }
+
+    private bool IsCaretInsideCommentOrString()
+    {
+        var document = EditorTextBox.Document;
+        var offset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(offset);
+        var lineOffset = offset - line.Offset;
+        var lineText = document.GetText(line);
+
+        var inString = false;
+        for (var index = 0; index < Math.Min(lineOffset, lineText.Length); index++)
+        {
+            if (lineText[index] == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (!inString && index + 1 < lineText.Length && lineText[index] == '/' && lineText[index + 1] == '/')
+            {
+                return true;
+            }
+        }
+
+        return inString;
     }
 
     private void InsertSmartNewLine()
