@@ -17,6 +17,7 @@ using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
+using AvaloniaEdit.Rendering;
 using PseudoCode.App.Services;
 
 namespace PseudoCode.App;
@@ -91,6 +92,7 @@ public partial class MainWindow : Window
     private readonly Queue<string> _contextMenuDiagnosticsLines = new();
     private bool _copiedWholeLine;
     private Point? _lastContextMenuOpenPoint;
+    private string? _hoveredEditorToken;
 
     public MainWindow()
     {
@@ -2281,6 +2283,58 @@ public partial class MainWindow : Window
         }
     }
 
+    private void UpdateEditorHoverTooltip(PointerEventArgs e)
+    {
+        if (e.Pointer.Type != PointerType.Mouse)
+        {
+            HideEditorHoverTooltip();
+            return;
+        }
+
+        if (!IsPointerInsideEditor(e))
+        {
+            HideEditorHoverTooltip();
+            return;
+        }
+
+        var hoveredWord = GetWordUnderPointer(e);
+        if (string.IsNullOrWhiteSpace(hoveredWord))
+        {
+            HideEditorHoverTooltip();
+            return;
+        }
+
+        var hoverText = BuildHoverDescription(hoveredWord);
+        if (string.IsNullOrWhiteSpace(hoverText))
+        {
+            HideEditorHoverTooltip();
+            return;
+        }
+
+        if (string.Equals(_hoveredEditorToken, hoveredWord, StringComparison.Ordinal) &&
+            Equals(ToolTip.GetTip(EditorTextBox.TextArea.TextView), hoverText))
+        {
+            return;
+        }
+
+        _hoveredEditorToken = hoveredWord;
+        ToolTip.SetTip(EditorTextBox.TextArea.TextView, hoverText);
+        ToolTip.SetPlacement(EditorTextBox.TextArea.TextView, PlacementMode.Pointer);
+        ToolTip.SetShowDelay(EditorTextBox.TextArea.TextView, 150);
+        ToolTip.SetIsOpen(EditorTextBox.TextArea.TextView, true);
+    }
+
+    private void HideEditorHoverTooltip()
+    {
+        if (_hoveredEditorToken is null && !ToolTip.GetIsOpen(EditorTextBox.TextArea.TextView))
+        {
+            return;
+        }
+
+        _hoveredEditorToken = null;
+        ToolTip.SetIsOpen(EditorTextBox.TextArea.TextView, false);
+    }
+
     private void MainWindow_DiagnosticKeyDown(object? sender, KeyEventArgs e)
     {
         if (!_runtimeSettings.Diagnostic.Enabled || !_runtimeSettings.Diagnostic.Features.Keystrokes)
@@ -3067,6 +3121,8 @@ public partial class MainWindow : Window
         ConfigureEditorContextMenu();
         EditorTextBox.TextArea.TextEntered += Editor_TextEntered;
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
+        EditorTextBox.TextArea.TextView.PointerHover += EditorTextView_PointerHover;
+        EditorTextBox.TextArea.TextView.PointerHoverStopped += EditorTextView_PointerHoverStopped;
         EditorTextBox.TextArea.AddHandler(
             InputElement.KeyDownEvent,
             Editor_KeyDown,
@@ -3576,7 +3632,13 @@ public partial class MainWindow : Window
         {
             if (_completionWindow is not null)
             {
-                _completionWindow.CompletionList.RequestInsertion(e);
+                _completionWindow.CompletionList.HandleKey(e);
+                if (!e.Handled)
+                {
+                    _completionWindow.CompletionList.RequestInsertion(EventArgs.Empty);
+                    e.Handled = true;
+                }
+
                 e.Handled = true;
                 return;
             }
@@ -3948,6 +4010,12 @@ public partial class MainWindow : Window
             data.Add(new PseudoCompletionData(item));
         }
 
+        if (data.Count > 0)
+        {
+            _completionWindow.CompletionList.CompletionAcceptKeys = [Key.Tab, Key.Enter];
+            _completionWindow.CompletionList.SelectedItem = data[0];
+        }
+
         _completionWindow.Show();
     }
 
@@ -3968,6 +4036,130 @@ public partial class MainWindow : Window
 
         return merged.Values.ToArray();
     }
+
+    private bool IsPointerInsideEditor(PointerEventArgs e)
+    {
+        var point = e.GetPosition(EditorTextBox.TextArea.TextView);
+        var bounds = EditorTextBox.TextArea.TextView.Bounds;
+        return point.X >= 0 && point.Y >= 0 && point.X <= bounds.Width && point.Y <= bounds.Height;
+    }
+
+    private string GetWordUnderPointer(PointerEventArgs e)
+    {
+        var document = EditorTextBox.Document;
+        if (document is null || document.TextLength == 0)
+        {
+            return string.Empty;
+        }
+
+        var textView = EditorTextBox.TextArea.TextView;
+        var point = e.GetPosition(textView);
+        var viewPosition = textView.GetPositionFloor(point);
+        if (viewPosition is null)
+        {
+            return string.Empty;
+        }
+
+        var offset = Math.Clamp(document.GetOffset(viewPosition.Value.Location), 0, document.TextLength);
+        if (offset >= document.TextLength)
+        {
+            offset = Math.Max(0, document.TextLength - 1);
+        }
+
+        if (document.TextLength == 0)
+        {
+            return string.Empty;
+        }
+
+        if (!IsIdentifierCharacter(document.GetCharAt(offset)))
+        {
+            if (offset == 0 || !IsIdentifierCharacter(document.GetCharAt(offset - 1)))
+            {
+                return string.Empty;
+            }
+
+            offset--;
+        }
+
+        var start = offset;
+        while (start > 0 && IsIdentifierCharacter(document.GetCharAt(start - 1)))
+        {
+            start--;
+        }
+
+        var end = offset;
+        while (end + 1 < document.TextLength && IsIdentifierCharacter(document.GetCharAt(end + 1)))
+        {
+            end++;
+        }
+
+        var startLocation = document.GetLocation(start);
+        var endLocation = document.GetLocation(end + 1);
+        var topLeft = textView.GetVisualPosition(new TextViewPosition(startLocation), VisualYPosition.LineTop);
+        var bottomRight = textView.GetVisualPosition(new TextViewPosition(endLocation), VisualYPosition.LineBottom);
+        var wordBounds = new Rect(topLeft, bottomRight);
+        if (!wordBounds.Contains(point))
+        {
+            return string.Empty;
+        }
+
+        return document.GetText(start, end - start + 1);
+    }
+
+    private void EditorTextView_PointerHover(object? sender, PointerEventArgs e) => UpdateEditorHoverTooltip(e);
+
+    private void EditorTextView_PointerHoverStopped(object? sender, PointerEventArgs e) => HideEditorHoverTooltip();
+
+    private string? BuildHoverDescription(string hoveredWord)
+    {
+        var command = BuildCompletionItems()
+            .FirstOrDefault(item => item.Text.Equals(hoveredWord, StringComparison.OrdinalIgnoreCase));
+        if (command is not null)
+        {
+            return command.Description;
+        }
+
+        var variableInfo = ExtractVariableInfos(EditorTextBox.Document?.Text ?? string.Empty);
+        if (variableInfo.TryGetValue(hoveredWord, out var description))
+        {
+            return description;
+        }
+
+        return null;
+    }
+
+    private Dictionary<string, string> ExtractVariableInfos(string source)
+    {
+        var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var declare = Regex.Escape(_language.Keyword("declare"));
+        var typeSeparator = Regex.Escape(_language.Keyword("typeSeparator"));
+
+        foreach (Match match in Regex.Matches(source, $@"(?im)^\s*{declare}\s+(.+?)(?:\s+{typeSeparator}\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$"))
+        {
+            var typeName = match.Groups[2].Success ? match.Groups[2].Value : null;
+            foreach (var name in match.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+                {
+                    continue;
+                }
+
+                variables[name] = typeName is null
+                    ? "Variable declarada en el documento actual."
+                    : $"Variable declarada en el documento actual. Tipo: {typeName}.";
+            }
+        }
+
+        foreach (Match match in Regex.Matches(source, @"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*<-"))
+        {
+            variables.TryAdd(match.Groups[1].Value, "Variable usada en el documento actual.");
+        }
+
+        return variables;
+    }
+
+    private static bool IsIdentifierCharacter(char character) =>
+        char.IsLetterOrDigit(character) || character == '_';
 
     private string GetCurrentWord()
     {
