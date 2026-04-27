@@ -19,6 +19,6 @@ internal sealed class PseudoCompletionData(CommandInfo item) : ICompletionData
 
     public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
     {
-        textArea.Document.Replace(completionSegment, item.InsertText);
+        textArea.Document.Replace(completionSegment, item.Text);
     }
 }
