@@ -3920,9 +3920,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        var matches = _completionItems
+        var completionItems = BuildCompletionItems();
+        var matches = completionItems
             .Where(item => item.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(item => item.Text.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(item => item.Description.StartsWith("Variable", StringComparison.OrdinalIgnoreCase))
             .ThenBy(item => item.Text)
             .ToArray();
 
@@ -3934,18 +3936,37 @@ public partial class MainWindow : Window
         _completionWindow?.Close();
         _completionWindow = new CompletionWindow(EditorTextBox.TextArea)
         {
-            Width = 360,
-            Height = 260
+            Width = 300,
+            Height = 180,
+            Opacity = 0.92
         };
         _completionWindow.Closed += (_, _) => _completionWindow = null;
 
         var data = _completionWindow.CompletionList.CompletionData;
-        foreach (var item in matches.Length == 0 ? _completionItems : matches)
+        foreach (var item in matches.Length == 0 ? completionItems : matches)
         {
             data.Add(new PseudoCompletionData(item));
         }
 
         _completionWindow.Show();
+    }
+
+    private CommandInfo[] BuildCompletionItems()
+    {
+        var merged = new Dictionary<string, CommandInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in _completionItems)
+        {
+            merged[item.Text] = item;
+        }
+
+        var source = EditorTextBox.Document?.Text ?? string.Empty;
+        foreach (var variable in ExtractVariables(source))
+        {
+            merged.TryAdd(variable, new CommandInfo(variable, variable, "Variable del documento actual."));
+        }
+
+        return merged.Values.ToArray();
     }
 
     private string GetCurrentWord()
