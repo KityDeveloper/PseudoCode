@@ -3537,7 +3537,7 @@ public partial class MainWindow : Window
 
     private void Editor_TextEntered(object? sender, TextInputEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(e.Text))
+        if (string.IsNullOrEmpty(e.Text))
         {
             return;
         }
@@ -3551,14 +3551,21 @@ public partial class MainWindow : Window
         if (char.IsLetter(e.Text[0]))
         {
             ShowCompletion();
+            return;
+        }
+
+        if (char.IsWhiteSpace(e.Text[0]))
+        {
+            ShowCompletion(force: true, contextOnly: true);
+            return;
         }
     }
 
     private void Editor_TextEntering(object? sender, TextInputEventArgs e)
     {
-        if (_completionWindow is not null && !string.IsNullOrEmpty(e.Text) && !char.IsLetterOrDigit(e.Text[0]))
+        if (_completionWindow is not null && !string.IsNullOrEmpty(e.Text) && !char.IsLetterOrDigit(e.Text[0]) && e.Text[0] != '_')
         {
-            _completionWindow.CompletionList.RequestInsertion(e);
+            _completionWindow.Close();
         }
     }
 
@@ -3968,7 +3975,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowCompletion(bool force = false)
+    private void ShowCompletion(bool force = false, bool contextOnly = false)
     {
         if (IsCaretInsideCommentOrString())
         {
@@ -3977,20 +3984,23 @@ public partial class MainWindow : Window
         }
 
         var prefix = GetCurrentWord();
+        var caretOffset = GetSafeCaretOffset(EditorTextBox.Document);
+        var completionStartOffset = Math.Max(0, caretOffset - prefix.Length);
+        var contextItems = BuildContextCompletionItems().ToArray();
         if (!force && prefix.Length < 2)
         {
             return;
         }
 
-        var completionItems = BuildCompletionItems();
+        var completionItems = contextOnly ? contextItems : BuildCompletionItems(contextItems);
         var matches = completionItems
-            .Where(item => item.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(item => prefix.Length == 0 || item.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(item => item.Text.Equals(prefix, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(item => item.Description.StartsWith("Variable", StringComparison.OrdinalIgnoreCase))
             .ThenBy(item => item.Text)
             .ToArray();
 
-        if (matches.Length == 0 && !force)
+        if (matches.Length == 0)
         {
             return;
         }
@@ -4002,10 +4012,12 @@ public partial class MainWindow : Window
             Height = 180,
             Opacity = 0.92
         };
+        _completionWindow.StartOffset = completionStartOffset;
+        _completionWindow.EndOffset = caretOffset;
         _completionWindow.Closed += (_, _) => _completionWindow = null;
 
         var data = _completionWindow.CompletionList.CompletionData;
-        foreach (var item in matches.Length == 0 ? completionItems : matches)
+        foreach (var item in matches)
         {
             data.Add(new PseudoCompletionData(item));
         }
@@ -4019,7 +4031,7 @@ public partial class MainWindow : Window
         _completionWindow.Show();
     }
 
-    private CommandInfo[] BuildCompletionItems()
+    private CommandInfo[] BuildCompletionItems(IEnumerable<CommandInfo>? contextItems = null)
     {
         var merged = new Dictionary<string, CommandInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -4034,7 +4046,105 @@ public partial class MainWindow : Window
             merged.TryAdd(variable, new CommandInfo(variable, variable, "Variable del documento actual."));
         }
 
+        foreach (var item in contextItems ?? BuildContextCompletionItems())
+        {
+            merged.TryAdd(item.Text, item);
+        }
+
         return merged.Values.ToArray();
+    }
+
+    private IEnumerable<CommandInfo> BuildContextCompletionItems()
+    {
+        var document = EditorTextBox.Document;
+        if (document is null)
+        {
+            yield break;
+        }
+
+        var caretOffset = GetSafeCaretOffset(document);
+        var line = document.GetLineByOffset(caretOffset);
+        var linePrefix = document.GetText(line.Offset, caretOffset - line.Offset).TrimStart();
+        var declareKeyword = _language.Keyword("declare");
+        var readKeyword = _language.Keyword("read");
+        var writeKeyword = _language.Keyword("write");
+        var typeSeparator = _language.Keyword("typeSeparator");
+        var source = document.Text;
+
+        if (linePrefix.StartsWith(readKeyword, StringComparison.OrdinalIgnoreCase))
+        {
+            var readTail = linePrefix[readKeyword.Length..];
+            if (readTail.Length > 0 && readTail[^1] == ' ')
+            {
+                foreach (var variable in ExtractVariables(source))
+                {
+                    yield return new CommandInfo(variable, variable, "Variable declarada en el documento actual.");
+                }
+            }
+
+            yield break;
+        }
+
+        if (linePrefix.StartsWith(writeKeyword, StringComparison.OrdinalIgnoreCase))
+        {
+            var writeTail = linePrefix[writeKeyword.Length..];
+            if (writeTail.Length > 0 && writeTail[^1] == ',')
+            {
+                yield break;
+            }
+
+            if (writeTail.EndsWith(", ", StringComparison.Ordinal))
+            {
+                foreach (var variable in ExtractVariables(source))
+                {
+                    yield return new CommandInfo(variable, variable, "Variable declarada en el documento actual.");
+                }
+            }
+
+            yield break;
+        }
+
+        if (!linePrefix.StartsWith(declareKeyword, StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        var declarationTail = linePrefix[declareKeyword.Length..].TrimStart();
+        if (declarationTail.Length == 0)
+        {
+            yield return new CommandInfo("variable", "variable", "Nombre sugerido para una variable nueva.");
+            yield break;
+        }
+
+        var typeSeparatorPattern = Regex.Escape(typeSeparator);
+        var namesPattern = @"[A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*";
+
+        if (Regex.IsMatch(declarationTail, $"^{namesPattern}\\s+$"))
+        {
+            yield return new CommandInfo(typeSeparator, typeSeparator, "Separador para indicar el tipo de la variable.");
+            yield break;
+        }
+
+        if (Regex.IsMatch(declarationTail, $"^{namesPattern}\\s+{typeSeparatorPattern}\\s*$", RegexOptions.IgnoreCase))
+        {
+            foreach (var type in _language.Types)
+            {
+                yield return new CommandInfo(type, type, "Tipo disponible para la declaracion actual.");
+            }
+
+            yield break;
+        }
+
+        if (Regex.IsMatch(declarationTail, $"^{namesPattern}\\s+[A-Za-z_]*$", RegexOptions.IgnoreCase))
+        {
+            yield return new CommandInfo(typeSeparator, typeSeparator, "Separador para indicar el tipo de la variable.");
+            yield break;
+        }
+
+        foreach (var type in _language.Types)
+        {
+            yield return new CommandInfo(type, type, "Tipo disponible para la declaracion actual.");
+        }
     }
 
     private bool IsPointerInsideEditor(PointerEventArgs e)
@@ -4103,6 +4213,11 @@ public partial class MainWindow : Window
             return string.Empty;
         }
 
+        if (IsOffsetInsideCommentOrString(document, offset))
+        {
+            return string.Empty;
+        }
+
         return document.GetText(start, end - start + 1);
     }
 
@@ -4160,6 +4275,31 @@ public partial class MainWindow : Window
 
     private static bool IsIdentifierCharacter(char character) =>
         char.IsLetterOrDigit(character) || character == '_';
+
+    private static bool IsOffsetInsideCommentOrString(TextDocument document, int offset)
+    {
+        var safeOffset = Math.Clamp(offset, 0, document.TextLength);
+        var line = document.GetLineByOffset(safeOffset);
+        var lineText = document.GetText(line);
+        var lineOffset = Math.Clamp(safeOffset - line.Offset, 0, lineText.Length);
+
+        var inString = false;
+        for (var index = 0; index < Math.Min(lineOffset, lineText.Length); index++)
+        {
+            if (lineText[index] == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (!inString && index + 1 < lineText.Length && lineText[index] == '/' && lineText[index + 1] == '/')
+            {
+                return true;
+            }
+        }
+
+        return inString;
+    }
 
     private string GetCurrentWord()
     {
