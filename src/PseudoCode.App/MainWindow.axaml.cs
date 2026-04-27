@@ -3574,6 +3574,13 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Tab)
         {
+            if (_completionWindow is not null)
+            {
+                _completionWindow.CompletionList.RequestInsertion(e);
+                e.Handled = true;
+                return;
+            }
+
             InsertAtCaret("    ");
             e.Handled = true;
             return;
