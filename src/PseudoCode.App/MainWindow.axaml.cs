@@ -88,6 +88,7 @@ public partial class MainWindow : Window
     private PseudoCodeColorizer? _colorizer;
     private DiagnosticUnderlineRenderer? _diagnosticUnderlineRenderer;
     private DebugLineRenderer? _debugLineRenderer;
+    private BlockStructureRenderer? _blockStructureRenderer;
     private readonly Queue<string> _mouseClickDiagnosticsLines = new();
     private readonly Queue<string> _contextMenuDiagnosticsLines = new();
     private bool _copiedWholeLine;
@@ -2129,6 +2130,8 @@ public partial class MainWindow : Window
 
         _completionWindow?.Close();
         _colorizer?.SetLanguage(_language);
+        _blockStructureRenderer?.SetLanguage(_language);
+        _blockStructureRenderer?.UpdateDocument(EditorTextBox.Document);
         ApplyTheme(_isLightTheme ? LightTheme : DarkTheme);
 
         HelpTopicsPanel.Children.Clear();
@@ -2576,6 +2579,7 @@ public partial class MainWindow : Window
         UpdateLiveSyntaxDiagnostics(_currentDocument);
         UpdateDiagnosticUnderlines();
         HighlightDebugLine(null);
+        RefreshBlockStructure();
         UpdateLineNumbers();
         UpdateOutputPanelView();
         RenderOpenDocuments();
@@ -3114,6 +3118,11 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.LineTransformers.Add(_colorizer);
         _diagnosticUnderlineRenderer = new DiagnosticUnderlineRenderer(palette.DiagnosticUnderlineBrush);
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_diagnosticUnderlineRenderer);
+        _blockStructureRenderer = new BlockStructureRenderer(_language);
+        _blockStructureRenderer.SetIndentationSize(EditorTextBox.Options.IndentationSize);
+        _blockStructureRenderer.UpdateDocument(EditorTextBox.Document);
+        _blockStructureRenderer.SetCaretLine(EditorTextBox.TextArea.Caret.Line);
+        EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_blockStructureRenderer);
         _debugLineRenderer = new DebugLineRenderer(BuildDebugLineBrush(palette));
         EditorTextBox.TextArea.TextView.BackgroundRenderers.Add(_debugLineRenderer);
         SetEditorFontSize(_runtimeSettings.EditorFontSize, persist: false, updateStatus: false);
@@ -3123,6 +3132,7 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextEntering += Editor_TextEntering;
         EditorTextBox.TextArea.TextView.PointerHover += EditorTextView_PointerHover;
         EditorTextBox.TextArea.TextView.PointerHoverStopped += EditorTextView_PointerHoverStopped;
+        EditorTextBox.TextArea.Caret.PositionChanged += EditorCaret_PositionChanged;
         EditorTextBox.TextArea.AddHandler(
             InputElement.KeyDownEvent,
             Editor_KeyDown,
@@ -5041,6 +5051,7 @@ public partial class MainWindow : Window
         }
 
         UpdateLineNumbers();
+        RefreshBlockStructure();
         HighlightDebugLine(document.DebugLine);
         UpdateDiagnosticUnderlines();
         UpdateOutputPanelView();
@@ -5479,7 +5490,34 @@ public partial class MainWindow : Window
         EditorTextBox.TextArea.TextView.CurrentLineBorder = new Pen(BrushFromTheme(colors, "BorderBrushMuted"), 1);
         _colorizer?.SetPalette(syntaxPalette);
         _diagnosticUnderlineRenderer?.SetBrush(syntaxPalette.DiagnosticUnderlineBrush);
+        _blockStructureRenderer?.SetActiveBlockBrush(BuildActiveBlockBrush(syntaxPalette));
         _debugLineRenderer?.SetBrush(BuildDebugLineBrush(syntaxPalette));
+        EditorTextBox.TextArea.TextView.Redraw();
+    }
+
+    private void EditorCaret_PositionChanged(object? sender, EventArgs e)
+    {
+        if (_isSwitchingDocument)
+        {
+            return;
+        }
+
+        RefreshBlockStructure(redrawOnly: true);
+    }
+
+    private void RefreshBlockStructure(bool redrawOnly = false)
+    {
+        if (_blockStructureRenderer is null || EditorTextBox.Document is null)
+        {
+            return;
+        }
+
+        _blockStructureRenderer.SetCaretLine(EditorTextBox.TextArea.Caret.Line);
+        if (!redrawOnly)
+        {
+            _blockStructureRenderer.UpdateDocument(EditorTextBox.Document);
+        }
+
         EditorTextBox.TextArea.TextView.Redraw();
     }
 
@@ -5498,6 +5536,19 @@ public partial class MainWindow : Window
         return luminance > 0.55
             ? new SolidColorBrush(Color.FromArgb(45, 76, 175, 80))
             : new SolidColorBrush(Color.FromArgb(85, 76, 175, 80));
+    }
+
+    private static SolidColorBrush BuildActiveBlockBrush(PseudoCodeColorPalette syntaxPalette)
+    {
+        if (syntaxPalette.BlockBrush is not SolidColorBrush block)
+        {
+            return new SolidColorBrush(Color.FromArgb(18, 94, 161, 255));
+        }
+
+        var color = block.Color;
+        var luminance = (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255;
+        var alpha = (byte)(luminance > 0.7 ? 42 : 20);
+        return new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
     }
 
     private static PseudoCodeColorPalette BuildThemePreviewPalette(string json)

@@ -26,15 +26,12 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
     private PseudoCodeColorPalette _palette;
     private Regex _keyword;
     private Regex _typeName;
-    private Regex _blockLine;
-
     public PseudoCodeColorizer(PseudoLanguageDefinition language, PseudoCodeColorPalette palette)
     {
         _language = language;
         _palette = palette;
         _keyword = language.BuildKeywordRegex();
         _typeName = language.BuildTypeRegex();
-        _blockLine = language.BuildBlockLineRegex();
     }
 
     public void SetLanguage(PseudoLanguageDefinition language)
@@ -42,7 +39,6 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
         _language = language;
         _keyword = language.BuildKeywordRegex();
         _typeName = language.BuildTypeRegex();
-        _blockLine = language.BuildBlockLineRegex();
     }
 
     public void SetPalette(PseudoCodeColorPalette newPalette)
@@ -53,14 +49,6 @@ internal sealed class PseudoCodeColorizer : DocumentColorizingTransformer
     protected override void ColorizeLine(DocumentLine line)
     {
         var text = CurrentContext.Document.GetText(line);
-
-        if (_blockLine.IsMatch(text))
-        {
-            ChangeLinePart(line.Offset, line.EndOffset, element =>
-            {
-                element.TextRunProperties.SetBackgroundBrush(_palette.BlockBrush);
-            });
-        }
 
         var commentIndex = FindCommentIndex(text);
         var codeLength = commentIndex >= 0 ? commentIndex : text.Length;

@@ -43,7 +43,7 @@ internal sealed class SyntaxTheme
         Number = "#098658",
         Operator = "#795E26",
         Comment = "#008000",
-        BlockBackground = "#EAF3FF",
+        BlockBackground = "#DCEEFF",
         DiagnosticUnderline = "#DC2626",
         EditorBackground = "#FFFFFF"
     };

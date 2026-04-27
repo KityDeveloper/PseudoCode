@@ -699,7 +699,7 @@ internal static class AppSettingsService
         "number": "#098658",
         "operator": "#795E26",
         "comment": "#008000",
-        "blockBackground": "#EAF3FF",
+        "blockBackground": "#DCEEFF",
         "diagnosticUnderline": "#DC2626",
         "editorBackground": "#FFFFFF"
       }
