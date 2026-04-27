@@ -5089,6 +5089,25 @@ public partial class MainWindow : Window
         OutputTabButton.FontWeight = _showDiagnostics ? FontWeight.Normal : FontWeight.SemiBold;
         DiagnosticsTabButton.Foreground = _showDiagnostics ? Brush("TextPrimary") : Brush("TextSecondary");
         DiagnosticsTabButton.FontWeight = _showDiagnostics ? FontWeight.SemiBold : FontWeight.Normal;
+
+        if (!_showDiagnostics)
+        {
+            ScrollOutputToEnd();
+        }
+    }
+
+    private void ScrollOutputToEnd()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var text = OutputTextBox.Text ?? string.Empty;
+            OutputTextBox.CaretIndex = text.Length;
+            var lineCount = OutputTextBox.GetLineCount();
+            if (lineCount > 0)
+            {
+                OutputTextBox.ScrollToLine(lineCount - 1);
+            }
+        }, DispatcherPriority.Background);
     }
 
     private bool UpdateLiveSyntaxDiagnostics(OpenDocument document)
